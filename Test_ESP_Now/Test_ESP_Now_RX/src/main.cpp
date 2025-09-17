@@ -69,10 +69,10 @@ void promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&paquete_datos, incomingData, sizeof(paquete_datos));
-  Serial.print("Bytes received: ");
-  Serial.println(len);
-  Serial.print("Mensaje recibido: ");
-  Serial.println(paquete_datos.word);
+//  Serial.print("Bytes received: ");
+//  Serial.println(len);
+//  Serial.print("Mensaje recibido: ");
+//  Serial.println(paquete_datos.word);
   Serial.print("RSSI: ");
   Serial.println(rssi_display);
 }
