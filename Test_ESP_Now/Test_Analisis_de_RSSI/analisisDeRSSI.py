@@ -1,44 +1,57 @@
-import serial
-import serial.tools.list_ports
 import time
+from pathlib import Path
 
-# Helper para listar puertos disponibles
-def listar_puertos():
-    puertos = serial.tools.list_ports.comports()
-    if not puertos:
-        print("No se detectaron puertos seriales.")
-    for puerto in puertos:
-        print(f"{puerto.device} - {puerto.description}")
+import pandas as pd
+import serial
+
+PUERTO = "COM4"
+BAUDRATE = 115200
+SALIDA_CSV = Path("rssi_log.csv")
+BLOQUE = 100  # cuántas filas acumular antes de escribir
+
+def guardar_bloque(rows):
+    df = pd.DataFrame(rows, columns=["timestamp", "rssi"])
+    df.to_csv(
+        SALIDA_CSV,
+        mode="a",
+        header=not SALIDA_CSV.exists(),  # escribe encabezado solo la primera vez
+        index=False,
+    )
 
 def main():
-    listar_puertos()  # Opcional, para elegir el puerto correcto
+    buffer = []
+    timerInit = time.time()
 
-    # Sustituye 'COM5' por el puerto donde está tu ESP32
-    puerto = "COM5"
-    baudrate = 115200  # Ajusta si tu firmware usa otra velocidad
+    with serial.Serial(PUERTO, BAUDRATE, timeout=1) as ser:
+        print(f"Escuchando {PUERTO}...")
+        while True:
+            linea = ser.readline().decode(errors="ignore").strip()
+            if not linea:
+                continue
 
-    try:
-        with serial.Serial(port=puerto, baudrate=baudrate, timeout=1) as ser:
-            print(f"Escuchando en {puerto} a {baudrate} baudios...")
-            while True:
-                linea = ser.readline().decode(errors="ignore").strip()
-                if not linea:
-                    continue
+            print(f"Mensaje recibido: {linea}")
+            rssi = None
 
-                print(f"Mensaje recibido: {linea}")
+            if "RSSI" in linea:
+                try:
+                    _, valor = linea.split(":", 1)
+                    rssi = int(valor)
+                    print(f"RSSI recibido: {rssi} dBm")
+                except ValueError:
+                    print("Formato de RSSI inesperado:", linea)
 
-                # Si el ESP32 manda algo tipo "RSSI:-67", podemos extraerlo:
-                if "RSSI" in linea:
-                    try:
-                        etiqueta, valor = linea.split(":", 1)
-                        rssi = int(valor)
-                        print(f"RSSI recibido: {rssi} dBm")
-                    except ValueError:
-                        print("Formato de RSSI inesperado; línea completa:", linea)
+            buffer.append((time.time()-timerInit, rssi))
 
-                time.sleep(0.01)
-    except serial.SerialException as err:
-        print(f"No se pudo abrir el puerto {puerto}: {err}")
+            if len(buffer) >= BLOQUE:
+                guardar_bloque(buffer)
+                buffer.clear()
+
+            time.sleep(0.01)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        # Escribe lo que quede pendiente si sales con Ctrl+C
+        if 'buffer' in locals() and buffer:
+            guardar_bloque(buffer)
