@@ -29,6 +29,32 @@ def insert_multiple(pings: list):
     r.raise_for_status()
     return r.json()
 
+def patch_ping(ping_id: str, new_value: float):
+    url = f"{SUPABASE_URL}/rest/v1/pings?id=eq.{ping_id}"
+    payload = {"value": new_value}
+
+    try:
+        r = requests.patch(
+            url,
+            headers={**headers, "Content-Type": "application/json", "Prefer":"return=representation"},
+            json=payload,
+            timeout=20
+        )
+        r.raise_for_status()  # lanza excepción si no es 2xx
+        return r.json() if r.text else {}
+    except requests.HTTPError as e:
+        print("Error en PATCH")
+        print("Status code:", e.response.status_code)
+        print("Respuesta del servidor:", e.response.text)
+        raise  # vuelve a lanzar la excepción por si querés que corte la ejecución
+
+def patch_ping_wrong_field(ping_id):
+    url = f"{SUPABASE_URL}/rest/v1/pings?id=eq.{ping_id}"
+    payload = {"wrong_field": "foo"}  # este campo no existe en la tabla
+    r = requests.patch(url, headers={**headers, "Content-Type":"application/json"}, json=payload, timeout=20)
+    r.raise_for_status()
+    return r.json()
+
 def get_last_pings(device_id: str, limit=5):
     url = f"{SUPABASE_URL}/rest/v1/pings"
     params = {
@@ -66,22 +92,32 @@ if __name__ == "__main__":
     #print("Rows:", rows)
 
     # Crear lista de múltiples mediciones para esp32-dev-02
-    mediciones_dev02 = [
-        {"device_id": "esp32-dev-02", "value": 25.5},
-        {"device_id": "esp32-dev-02", "value": 30.2},
-        {"device_id": "esp32-dev-02", "value": 28.7},
-        {"device_id": "esp32-dev-02", "value": 32.1},
-        {"device_id": "esp32-dev-02", "value": 27.9}
-    ]
-    
-    print("Insertando múltiples mediciones para esp32-dev-02...")
-    rows = insert_multiple(mediciones_dev02)
-    print(f"Insert múltiple OK: {len(rows)} filas insertadas")
-    
-    print("Leyendo último de esp32-dev-01...")
-    row = get_last("esp32-dev-01")
-    print("Last esp32-dev-01:", row)
-    
+#    mediciones_dev02 = [
+#        {"device_id": "esp32-dev-02", "value": 25.5},
+#        {"device_id": "esp32-dev-02", "value": 30.2},
+#        {"device_id": "esp32-dev-02", "value": 28.7},
+#        {"device_id": "esp32-dev-02", "value": 32.1},
+#        {"device_id": "esp32-dev-02", "value": 27.9}
+#    ]
+#    
+#    print("Insertando múltiples mediciones para esp32-dev-02...")
+#    rows = insert_multiple(mediciones_dev02)
+#    print(f"Insert múltiple OK: {len(rows)} filas insertadas")
+#    
+#    print("Leyendo último de esp32-dev-01...")
+#    row = get_last("esp32-dev-01")
+#    print("Last esp32-dev-01:", row)
+#    
     print("Leyendo últimas de esp32-dev-02...")
     rows = get_last_pings("esp32-dev-02", limit=2)
     print("Last esp32-dev-02:", rows)
+
+    if rows:
+        first_ping_id = rows[0]['id']
+        #first_ping_id = "11111111-2222-3333-4444-555555555555"
+        print(f"Patching ping ID {first_ping_id} to new value 99.9")
+        try:
+            patched = patch_ping_wrong_field(first_ping_id)
+            print("Patched:", patched)
+        except Exception as e:
+            print("Se produjo una excepción:", e)
