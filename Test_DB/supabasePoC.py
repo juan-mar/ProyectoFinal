@@ -16,12 +16,32 @@ headers = {
     "Prefer": "return=representation"   # que devuelva la fila insertada
 }
 
+headers_upsert = {
+    "apikey": SUPABASE_ANON,
+    "Authorization": f"Bearer {SUPABASE_ANON}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation,resolution=merge-duplicates"
+}
+
 def insert_ping(device_id: str, value: float):
     url = f"{SUPABASE_URL}/rest/v1/pings"
     payload = {"device_id": device_id, "value": value}
     r = requests.post(url, headers=headers, data=json.dumps(payload), timeout=20)
     r.raise_for_status()
     return r.json()
+
+def upsert_ping_by_id(ping_id: str, device_id: str, value: float):
+    url = f"{SUPABASE_URL}/rest/v1/pings?on_conflict=id"
+    payload = [{"id": ping_id, "device_id": device_id, "value": value}]  # lista!
+    r = requests.post(url, headers=headers_upsert, data=json.dumps(payload), timeout=20)
+    try:
+        r.raise_for_status()
+    except requests.HTTPError as e:
+        print("Status:", e.response.status_code)
+        print("Body:", e.response.text)
+        raise
+    return r.json()
+
 
 def insert_multiple(pings: list):
     url = f"{SUPABASE_URL}/rest/v1/pings"
@@ -109,15 +129,20 @@ if __name__ == "__main__":
 #    print("Last esp32-dev-01:", row)
 #    
     print("Leyendo últimas de esp32-dev-02...")
-    rows = get_last_pings("esp32-dev-02", limit=2)
+    rows = get_last_pings("esp32-dev-02", limit=1)
     print("Last esp32-dev-02:", rows)
 
-    if rows:
-        first_ping_id = rows[0]['id']
-        #first_ping_id = "11111111-2222-3333-4444-555555555555"
-        print(f"Patching ping ID {first_ping_id} to new value 99.9")
-        try:
-            patched = patch_ping_wrong_field(first_ping_id)
-            print("Patched:", patched)
-        except Exception as e:
-            print("Se produjo una excepción:", e)
+#    if rows:
+#        first_ping_id = rows[0]['id']
+#        #first_ping_id = "11111111-2222-3333-4444-555555555555" # ID que no existe no tira error, no devuelve nada 
+#        print(f"Patching ping ID {first_ping_id} to new value 99.9")
+#        try:
+#            patched = patch_ping_wrong_field(first_ping_id) #campo invalido tira error 400
+#            print("Patched:", patched)
+#        except Exception as e:
+#            print("Se produjo una excepción:", e)
+    
+    # 2ª vez con MISMO id: actualiza (no duplica)
+    my_id = rows[0]['id']
+    print("ID usado para UPSERT:", my_id)  
+    print("UPSERT #2 (update):", upsert_ping_by_id(my_id, "esp32-dev-02", 199.99))
