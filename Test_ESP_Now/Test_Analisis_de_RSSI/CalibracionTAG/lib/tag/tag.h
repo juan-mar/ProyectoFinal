@@ -14,11 +14,9 @@
 #define CAL_TIME 5000
 
 // Variables globales
-static bool calOK;
-static bool calibrating;
 static Preferences prefs;
 
-/******** Estructuras para ESP-NOW ********/
+/******** Estructuras y Funciones para ESP-NOW ********/
 
 typedef struct {
     char word[12];  
@@ -42,14 +40,14 @@ typedef struct {
 
 
 //Funciones para ESP-NOW
-
 //La callback que hace la magia
 void promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type);
 
 // callback function that will be executed when data is received
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len);
 
-/******** Fin estructuras ESP-NOW ********/
+
+/******** Fin estructuras y funciones para ESP-NOW ********/
 
 
 // Clase Receptor
@@ -57,20 +55,48 @@ class Receptor {
   private:
     float threshold;
     float varianza;
-    float x_est;
-    float P_est;
+
     //int macAddr;
 
-    float filtrado(float nuevaMuestra, float R = 0.1, float Q = 0.001);
+    //Declarancion de funciones privadas
+    //Filtro de Kalman
+    //float filtrado(float nuevaMuestra, float R = 0.1, float Q = 0.001);
 
   public:
     Receptor(); // Constructor
     ~Receptor(); // Destructor
 
-    void calibracion();
-    float getRSSI();
+    bool calibracion();
+    int getRSSI();
     float getThreshold();
     float getVarianza();
+
+};
+
+
+// Clase Filtro
+class Filtro {
+  private:
+    float x_est;
+    float P_est;
+    float varianzaR;
+    float varianzaQ;
+    
+    //int macAddr;
+
+    //Declarancion de funciones privadas
+    //Filtro de Kalman
+    //float filtroKalman(float nuevaMuestra, float R = 0.1, float Q = 0.001);
+    float filtroKalman(float nuevaMuestra);
+
+  public:
+    Filtro(); // Constructor
+    ~Filtro(); // Destructor
+
+    void set_varianzaR(float var);
+    void set_varianzaQ(float var);
+    
+    void filtrado(float val);
 
 };
 

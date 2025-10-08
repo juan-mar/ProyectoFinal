@@ -5,7 +5,7 @@
 // Variables globales
 Receptor rx;
 
-
+bool calib = false;
 
 
 void setup() {
@@ -21,23 +21,22 @@ void setup() {
     return;
   }
 
-
   // Once ESPNow is successfully Init, we will register for recv CB to
   // get recv packer info
   esp_now_register_recv_cb(OnDataRecv);
 
-  //CB para el RSSI
+  //CB para el RSSI`
   esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(&promiscuous_rx_cb);
-  
+
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-  if (Serial.available() > 0) {        // si hay datos disponibles
+  if (Serial.available() > 0 || calib) { // si hay datos disponibles en el puerto serie
     char ok = Serial.read();           // leer un carácter
-    if (ok == 'c') {                   // si el carácter es 'c'
-      rx.calibracion();              // llamar a la función calibracion
+    if (ok == 'c' || calib) {          // si el carácter es 'c'
+      calib = rx.calibracion();                // llamar a la función calibracion
     }
   }
 }
