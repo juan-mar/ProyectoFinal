@@ -6,12 +6,14 @@ static int rssi_display;
 static float rssi_filtered;
 
 static bool calibrating = false;
+static bool new_msg = false;
 static unsigned long lastSampleTime = 0;
 
 
 static long sumRSSI = 0;
 static long sumSqRSSI = 0;
 static int sampleCount = 0;
+static float sum_var = 0;
 
 
 static Filtro filtro_kalman;
@@ -34,7 +36,9 @@ bool Receptor::calibracion() {
   unsigned long now = millis();
 
   // Es momento de tomar una nueva muestra?
-  if ((now - lastSampleTime) >= SAMPLE_INTERVAL) {
+  //if ((now - lastSampleTime) >= SAMPLE_INTERVAL) {
+  if (new_msg)
+  {
     Serial.println("calibrando...");
     lastSampleTime = now;
 
@@ -42,11 +46,11 @@ bool Receptor::calibracion() {
     Serial.print("Muestra RSSI: ");
     Serial.println(rssi_calib);
 
-    sumRSSI += rssi_calib;
-    sumSqRSSI += (long)rssi_calib * (long)rssi_calib; //suma el cuadrado de la muestra
     sampleCount++;
+    sumRSSI += rssi_calib;
+    sum_var += (((rssi_calib - (sumRSSI / sampleCount)) * (rssi_calib - (sumRSSI / sampleCount))) / sampleCount);
+    
     return true;
-
   }
   else if ((now - calibStart) >= CAL_TIME) {
     Serial.println("Fin calibracion");
@@ -55,7 +59,7 @@ bool Receptor::calibracion() {
 
     if (sampleCount > 0) {
       this -> threshold = (float)sumRSSI / sampleCount;
-      this -> varianza  = ((float)sumSqRSSI / sampleCount)- (this -> threshold * this -> threshold);
+      this -> varianza  = sum_var;
       filtro_kalman.set_varianzaR(this -> varianza);
       Serial.print("Threshold:");
       Serial.println(this -> threshold);
@@ -103,28 +107,26 @@ void promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
   const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
 
   int rssi = ppkt->rx_ctrl.rssi;
+  new_msg = false;
   rssi_display = rssi;
-  if(!calibrating)
-  {
-    filtro_kalman.filtrado(rssi_display);
-  }
-
-  Serial.print("Type: ");
-  Serial.println(type);
 
 }
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&paquete_datos, incomingData, sizeof(paquete_datos));
-//  Serial.print("Bytes received: ");
-//  Serial.println(len);
-//  Serial.print("Mensaje recibido: ");
-//  Serial.println(paquete_datos.word);
+  new_msg = true;
+  //  Serial.print("Bytes received: ");
+  //  Serial.println(len);
+  //  Serial.print("Mensaje recibido: ");
+  //  Serial.println(paquete_datos.word);
   Serial.print("RSSI: ");
   Serial.println(rssi_display);
-  Serial.print("RSSI filtrado: ");
-  Serial.println(rssi_filtered);
-
+  if(!calibrating)
+  {
+    filtro_kalman.filtrado(rssi_display);
+    Serial.print("RSSI filtrado: ");
+    Serial.println(rssi_filtered);
+  }
 }
 
 /********************************** Funciones Filtro ************************************/
