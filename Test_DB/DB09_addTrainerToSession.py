@@ -32,8 +32,8 @@ def assign_trainer(session_id, trainer_uuid, token):
 
 
 if __name__ == '__main__':
-    device_token = login('lanzador_01@device.test', 'lanzador_01')
-    device_code = 'ESP32-001'
+    #device_token = login('lanzador_01@device.test', 'lanzador_01')
+    #device_code = 'ESP32-001'
 
     tr_token = login("trainer1@demo.test", "trainer1234")
     trainer_uuid = get_user_id_from_token(tr_token)
