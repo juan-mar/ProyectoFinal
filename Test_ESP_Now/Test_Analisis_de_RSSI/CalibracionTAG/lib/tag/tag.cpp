@@ -1,9 +1,15 @@
 #include "tag.h"
 
+#define SAMPLE_INTERVAL 200
+#define CAL_TIME 5000
+#define CAL_SAMPLES ((CAL_TIME / SAMPLE_INTERVAL) + 2)
+
+
 static struct_message_t paquete_datos;
 
 static int rssi_display;
 static float rssi_filtered;
+static float samples[CAL_SAMPLES];
 
 static bool calibrating = false;
 static bool new_msg = false;
@@ -36,9 +42,10 @@ bool Receptor::calibracion() {
   unsigned long now = millis();
 
   // Es momento de tomar una nueva muestra?
-  //if ((now - lastSampleTime) >= SAMPLE_INTERVAL) {
-  if (new_msg)
+  //if ((now - lastSampleTime) >= SAMPLE_INTERVAL) 
+  if (new_msg && (now - calibStart) < CAL_TIME)
   {
+    new_msg = false;
     Serial.println("calibrando...");
     lastSampleTime = now;
 
@@ -48,7 +55,10 @@ bool Receptor::calibracion() {
 
     sampleCount++;
     sumRSSI += rssi_calib;
-    sum_var += (((rssi_calib - (sumRSSI / sampleCount)) * (rssi_calib - (sumRSSI / sampleCount))) / sampleCount);
+    samples[sampleCount - 1] = rssi_calib;
+    Serial.print("sampleCount: ");
+    Serial.println(sampleCount);
+    //sum_var += (((rssi_calib - (sumRSSI / sampleCount)) * (rssi_calib - (sumRSSI / sampleCount))) / sampleCount);
     
     return true;
   }
@@ -59,6 +69,9 @@ bool Receptor::calibracion() {
 
     if (sampleCount > 0) {
       this -> threshold = (float)sumRSSI / sampleCount;
+      for(int i = 0; i < sampleCount; i++) {
+        sum_var += ((samples[i] - this->threshold) * (samples[i] - this->threshold))/sampleCount;
+      }
       this -> varianza  = sum_var;
       filtro_kalman.set_varianzaR(this -> varianza);
       Serial.print("Threshold:");
@@ -119,10 +132,11 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   //  Serial.println(len);
   //  Serial.print("Mensaje recibido: ");
   //  Serial.println(paquete_datos.word);
-  Serial.print("RSSI: ");
-  Serial.println(rssi_display);
+ 
   if(!calibrating)
   {
+    Serial.print("RSSI: ");
+    Serial.println(rssi_display);
     filtro_kalman.filtrado(rssi_display);
     Serial.print("RSSI filtrado: ");
     Serial.println(rssi_filtered);

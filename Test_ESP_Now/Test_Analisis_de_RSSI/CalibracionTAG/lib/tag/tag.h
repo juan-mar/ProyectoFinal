@@ -10,8 +10,7 @@
 #include <SPI.h>
 #include <Wire.h>
 
-#define SAMPLE_INTERVAL 100
-#define CAL_TIME 5000
+
 
 // Variables globales
 static Preferences prefs;

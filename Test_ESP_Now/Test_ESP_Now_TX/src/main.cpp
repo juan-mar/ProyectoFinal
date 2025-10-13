@@ -76,8 +76,8 @@ void setup() {
 
   delay(100); // Da tiempo a que se complete la transmisión
 
-  // Configura el wake-up cada 1 segundo
-  esp_sleep_enable_timer_wakeup(1 * 1000000);
+  // Configura el wake-up cada 0,01 segundo
+  esp_sleep_enable_timer_wakeup(1 * 10000);
 
   Serial.println("Entrando en deep sleep...");
   esp_deep_sleep_start();
