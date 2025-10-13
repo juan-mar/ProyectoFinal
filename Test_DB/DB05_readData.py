@@ -31,6 +31,17 @@ def _get_uuid_from_trainer(token):
         raise ValueError("Token no valido")
     return data[0]["id"]
 
+def get_user_id_from_token(token):
+    url = f"{BASE}/auth/v1/user"
+    resp = requests.get(
+        url,
+        headers={"apikey": ANON, "Authorization": f"Bearer {token}"},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json()["id"]
+
+
 def _dog_uuid_from_code(dog_code, token):
     """Resolve a human readable dog_code to its UUID primary key."""
     url = f"{BASE}/rest/v1/dogs"
@@ -51,8 +62,8 @@ def _dog_uuid_from_code(dog_code, token):
         raise ValueError(f"No existe un perro con codigo {dog_code!r}")
     return data[0]["id"]
 
-
-def sessions_by_dog(dog_reference, limit=50, token=TOKEN):
+# Listar sesiones por perro, usando su UUID, si no lo tiene entonces lo consulta. Accede directo a la tabla training_sessions
+def sessions_by_dog_code_direct_access(dog_reference, limit=50, token=TOKEN):
     try:
         uuid.UUID(str(dog_reference))
         dog_id = str(dog_reference)
@@ -75,8 +86,9 @@ def sessions_by_dog(dog_reference, limit=50, token=TOKEN):
     print(response.status_code)
     response.raise_for_status()
     print(json.dumps(response.json(), indent=2))
+    return response.json()
 
-
+# Listar sesiones por entrenador, usando su email. Accede directo a la tabla training_sessions
 def sessions_by_trainer(trainer_id, limit=50, token=TOKEN):
     url = f"{BASE}/rest/v1/training_sessions"
     params = {
@@ -99,8 +111,7 @@ def sessions_by_trainer(trainer_id, limit=50, token=TOKEN):
 if __name__ == "__main__":
     # Primero obten el access_token con login() y pegalo en TOKEN mas arriba
     tr_token = login("trainer1@demo.test", "trainer1234")
-    # gs_token = login("guest@demo.test", "guest1234")
+    gs_token = login("guest2@demo.test", "guest2")
 
     # Completa uno de estos y comenta el otro:
-    #sessions_by_dog("FIRU-001", limit=20, token=tr_token)
-    sessions_by_trainer("trainer1@demo.test", limit=20, token=tr_token)
+    sessions_by_dog_code_direct_access("SIMON-01", limit=20, token=gs_token)

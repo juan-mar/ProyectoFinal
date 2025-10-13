@@ -29,8 +29,10 @@ if __name__ == "__main__":
     #Ya agregados
     #add_dog("FIRU-001", "Firulais", breed="Labrador", sex="M", unit="K9", token=ad_token)
     #add_dog("LUNA-002", "Luna", breed="Pastor Alemán", sex="F", unit="K9", token=ad_token)
-    
-    #Agregar nuevos
+    #add_dog("NEWT-001", "Newton", breed="Boyero de Berna", sex="M", token=ad_token)
+    #add_dog("SIMON-01", "Simón", breed="Boyero de Berna", sex="M", token=ad_token)
 
+    #Agregar nuevos
+    
 
     list_dogs(token = ad_token)

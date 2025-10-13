@@ -20,4 +20,4 @@ def promote_user(email, new_role, name=None, admin_token=ADMIN_TOKEN):
 if __name__ == "__main__":
     token = login("admin@demo.test", "admin1234")
     #promote_user("trainer1@demo.test", "trainer", "Jose Antonio", token)
-    promote_user("admin@demo.test", "admin", "Admin Test", token)
+    promote_user("guest2@demo.test", "guest", "Marcelo", token)
