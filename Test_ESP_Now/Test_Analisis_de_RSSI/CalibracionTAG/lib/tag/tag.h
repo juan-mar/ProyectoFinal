@@ -65,10 +65,18 @@ class Receptor {
     Receptor(); // Constructor
     ~Receptor(); // Destructor
 
+    //Funcion de calibracion
     bool calibracion();
+    
+    //Funcion para detectar el threshold
+    bool detect_thres();
+
+
+
     int getRSSI();
     float getThreshold();
     float getVarianza();
+
 
 };
 

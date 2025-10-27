@@ -36,6 +36,9 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void setup() {
   Serial.begin(115200);
+  pinMode(5, OUTPUT);
+//  digitalWrite(5, LOW);
+
 
   // Inicializa WiFi en modo estación
   WiFi.mode(WIFI_STA);
@@ -70,14 +73,17 @@ void setup() {
   esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&paquete_datos, sizeof(paquete_datos));
   if (result == ESP_OK) {
     Serial.println("Mensaje enviado");
+    //digitalWrite(5, !digitalRead(5));
+    //digitalWrite(5, !digitalRead(5)); // Cambia el estado del pin 5
   } else {
-    Serial.println("Error al enviar");
+    //Serial.println("Error al enviar");
   }
 
-  delay(100); // Da tiempo a que se complete la transmisión
+  delay(50); // Da tiempo a que se complete la transmisión
+  //digitalWrite(5, LOW);
 
-  // Configura el wake-up cada 0,01 segundo
-  esp_sleep_enable_timer_wakeup(1 * 10000);
+  // Configura el wake-up cada 0,1 segundo
+  esp_sleep_enable_timer_wakeup(1 * 100000);
 
   Serial.println("Entrando en deep sleep...");
   esp_deep_sleep_start();

@@ -10,6 +10,8 @@ static struct_message_t paquete_datos;
 static int rssi_display;
 static float rssi_filtered;
 static float samples[CAL_SAMPLES];
+static int barrier = 0;
+static bool in_thres = false;
 
 static bool calibrating = false;
 static bool new_msg = false;
@@ -30,10 +32,29 @@ Receptor::Receptor() {
   //macAddr = 0;
   rssi_display = 0;
 
+  // Set device as a Wi-Fi Station
+  WiFi.mode(WIFI_STA);
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+  
+  // Once ESPNow is successfully Init, we will register for recv CB to
+  // get recv packer info
+  esp_now_register_recv_cb(OnDataRecv);
+
+  //CB para el RSSI`
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_promiscuous_rx_cb(&promiscuous_rx_cb);
+
+
 }
 
 Receptor::~Receptor() {
-  // Destructor
+  WiFi.mode(WIFI_OFF);
+  esp_now_deinit();
 }
 
 bool Receptor::calibracion() {
@@ -43,7 +64,7 @@ bool Receptor::calibracion() {
 
   // Es momento de tomar una nueva muestra?
   //if ((now - lastSampleTime) >= SAMPLE_INTERVAL) 
-  if (new_msg && (now - calibStart) < CAL_TIME)
+  if (new_msg && (sampleCount < CAL_SAMPLES))
   {
     new_msg = false;
     Serial.println("calibrando...");
@@ -62,7 +83,7 @@ bool Receptor::calibracion() {
     
     return true;
   }
-  else if ((now - calibStart) >= CAL_TIME) {
+  else if (sampleCount >= CAL_SAMPLES) {
     Serial.println("Fin calibracion");
     
     calibrating = false;
@@ -78,6 +99,8 @@ bool Receptor::calibracion() {
       Serial.println(this -> threshold);
       Serial.print("Varianza:");
       Serial.println(this -> varianza);
+
+      barrier = threshold - 3 * sqrt(varianza); //CHECKEAR VALOR DE LA BARRERA
       // Guardar en NVS
       //prefs.begin("calib", false);
       //prefs.putFloat("mean", threshold);
@@ -91,6 +114,24 @@ bool Receptor::calibracion() {
   }
   else {
     return true; // calibración en progreso
+  }
+}
+
+bool Receptor::detect_thres() {
+  int rssi_curr = rssi_filtered;
+  if (rssi_curr > this->threshold) {
+    in_thres = true;
+    return true; // señal detectada
+  } 
+  else if (rssi_curr < barrier) {
+    in_thres = false;
+    return false; // señal no detectada
+  } 
+  else if (in_thres) {
+    return true; // señal detectada
+  }
+  else {
+    return false; // señal no detectada
   }
 }
 
