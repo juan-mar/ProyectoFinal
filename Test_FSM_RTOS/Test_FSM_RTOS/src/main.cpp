@@ -41,6 +41,8 @@ void stateManagerTask(void* parameter);
  ****************************************************************/
 
 void setup() {
+    pinMode(LED_BUILTIN, OUTPUT);
+
     // 1. Initialize Serial Monitor
     Serial.begin(115200);
     // Wait a moment for the monitor to connect
@@ -88,7 +90,7 @@ void stateManagerTask(void* parameter) {
 
         // 5. Yield to other tasks.
         // This delay controls how often the FSM execute() runs.
-        vTaskDelay(10 / portTICK_PERIOD_MS); // Run every 10ms
+        //vTaskDelay(10 / portTICK_PERIOD_MS); // Run every 10ms
     }
 }
 
@@ -144,6 +146,7 @@ void loop() {
         }
     }
 
+    //digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));   // turn the LED on (HIGH is the voltage level)
     // Give other tasks (like the Serial task) time to run
     vTaskDelay(50 / portTICK_PERIOD_MS);
 }

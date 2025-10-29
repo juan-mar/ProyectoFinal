@@ -33,7 +33,7 @@ void SyncState::execute(StateManager* manager) {
     QueueHandle_t queue = manager->getEventQueue();
 
     // Check for an event (non-blocking)
-    if (xQueueReceive(queue, &event, 0) == pdTRUE) {
+    if (xQueueReceive(queue, &event, 1000 / portTICK_PERIOD_MS) == pdTRUE) {
         
         switch (event.type) {
             case EVENT_MODE_OFFLINE_ACTIVATED:
@@ -56,6 +56,8 @@ void SyncState::execute(StateManager* manager) {
                 break;
         }
     }
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));   // turn the LED on (HIGH is the voltage level)
+
 }
 
 void SyncState::exit(StateManager* manager) {

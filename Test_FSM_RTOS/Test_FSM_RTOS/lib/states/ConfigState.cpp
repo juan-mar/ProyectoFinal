@@ -32,8 +32,7 @@ void ConfigState::execute(StateManager* manager) {
     QueueHandle_t queue = manager->getEventQueue();
 
     // Check for an event (non-blocking)
-    if (xQueueReceive(queue, &event, 0) == pdTRUE) {
-        
+    if (xQueueReceive(queue, &event, 500 / portTICK_PERIOD_MS) == pdTRUE) {
         switch (event.type) {
             case EVENT_MODE_ONLINE_ACTIVATED:
                 Serial.println("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
@@ -55,6 +54,7 @@ void ConfigState::execute(StateManager* manager) {
                 break;
         }
     }
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));   // turn the LED on (HIGH is the voltage level)
 
     // TODO: In a real implementation, you would also call:
     // webServerManager->handleClient();
