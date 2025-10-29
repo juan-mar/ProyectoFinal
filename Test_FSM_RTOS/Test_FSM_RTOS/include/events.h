@@ -1,64 +1,54 @@
 /****************************************************************
- * @file NombreDelArchivo.h
- * @brief Breve descripción de lo que hace este archivo.
+ * @file Events.h
+ * @brief Defines the event types and data structure
+ * used in the FSM event queue.
  ****************************************************************/
 
 /****************************************************************
  * Include Guards
  ****************************************************************/
-#ifndef NOMBRE_DEL_ARCHIVO_H
-#define NOMBRE_DEL_ARCHIVO_H
+#ifndef EVENTS_H
+#define EVENTS_H
 
 /****************************************************************
- * Headers
+ * Data Types (structs, enums)
  ****************************************************************/
 
-/****************************************************************
- * Forward Declarations
- ****************************************************************/
-
-/****************************************************************
- * Defines
- ****************************************************************/
-
-/****************************************************************
- * Types of data
- ****************************************************************/
 /**
- * @brief Enumera todos los posibles tipos de eventos que pueden
- * ocurrir en el sistema y ser procesados por el GestorDeEstados.
+ * @brief Enumerates all possible event types that can
+ * occur in the system and be processed by the StateManager.
  */
-enum typeEvent {
-    // --- Eventos de Transición de Estado ---
-    EVENTO_NULO = 0,                // Evento inválido o por defecto
+enum EventType {
+    // --- System / Null Event ---
+    EVENT_NULL = 0,                 // Invalid or default event
+
+    // --- Events from ConfigState (WebServer) ---
+    EVENT_START_MANUAL_PLAY,        // User pressed "Start Manual" on web
+    EVENT_START_AUTO_PLAY,          // User pressed "Start Auto" on web
+
+    // --- Events from Play States ---
+    EVENT_PLAY_FINISHED,            // User pressed "Finish" button (manual or auto)
     
-    EVENTO_EMPEZAR_JUEGO_MANUAL,    // Gatillado por el WebServer
-    EVENTO_EMPEZAR_JUEGO_AUTOMATICO,// Gatillado por el WebServer
-    EVENTO_FIN_JUEGO,               // Gatillado por ManualController o AutoController
+    // --- Hardware Interrupt Events ---
+    EVENT_MODE_ONLINE_ACTIVATED,    // Hardware switch moved to ONLINE
+    EVENT_MODE_OFFLINE_ACTIVATED,   // Hardware switch moved to OFFLINE
     
-    // --- Eventos de Hardware ---
-    EVENTO_MODO_ONLINE_ACTIVADO,    // Gatillado por ISR del interruptor
-    EVENTO_MODO_OFFLINE_ACTIVADO,   // Gatillado por ISR del interruptor
-    
-    // --- Eventos de Módulos Internos ---
-    EVENTO_SINCRO_DATOS_TERMINADA,  // Enviado por SupabaseManager
-    EVENTO_SINCRO_DATOS_FALLIDA     // Enviado por SupabaseManager
+    // --- Internal Module Events ---
+    EVENT_SYNC_COMPLETED,           // SupabaseManager finished uploading
+    EVENT_SYNC_FAILED               // SupabaseManager failed to upload
 };
 
 /**
- * @brief Estructura del objeto que se envía a través de la cola de eventos.
+ * @brief The data structure sent through the event queue.
  */
-struct event{
-    typeEvent tipo;
+struct Event {
+    EventType type;
     union {
-        int     valorInt;
-        float   valorFloat;
-        bool    valorBool;
+        int     intValue;
+        float   floatValue;
+        bool    boolValue;
     } payload;
 };
 
-/****************************************************************
- * Classes / Functions prototypes
- ****************************************************************/
 
 #endif // EVENTS_H
