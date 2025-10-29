@@ -13,8 +13,9 @@
 /****************************************************************
  * Headers
  ****************************************************************/
+#include <Arduino.h>        
 #include <freertos/queue.h> 
-#include "events.h"         
+#include "Events.h"         
 
 /****************************************************************
  * Forward Declarations
@@ -32,12 +33,12 @@ class State;
 class StateManager {
 public:
     /**
-     * @brief Constructor. Creates the event queue and sets the initial state.
+     * @brief Creates the event queue and sets the initial state.
      */
     StateManager();
 
     /**
-     * @brief Destructor. Cleans up the queue and current state.
+     * @brief Cleans up the queue and current state.
      */
     ~StateManager();
 

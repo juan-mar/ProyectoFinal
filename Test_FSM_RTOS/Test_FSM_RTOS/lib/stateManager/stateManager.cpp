@@ -25,12 +25,11 @@
  */
 StateManager::StateManager() : currentState(nullptr) {
     // Create the event queue
-    eventQueue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(event));
+    eventQueue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(Event));
 
     if (eventQueue == NULL) {
         // Handle critical error
         Serial.println("FATAL ERROR: Could not create event queue!");
-        // In a real product, you might loop forever or restart
         while(1);
     }
 
@@ -65,7 +64,6 @@ StateManager::~StateManager() {
  */
 void StateManager::execute() {
     if (currentState != nullptr) {
-        // Delegate all work to the current state's execute method
         currentState->execute(this);
     }
 }
