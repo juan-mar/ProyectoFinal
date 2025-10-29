@@ -1,148 +1,149 @@
+/****************************************************************
+ * @file main.cpp
+ * @brief Main application entry point.
+ * Initializes the StateManager and provides a serial interface
+ * to simulate events for testing the FSM.
+ ****************************************************************/
+
+/****************************************************************
+ * Headers
+ ****************************************************************/
 #include <Arduino.h>
+#include "StateManager.h" // Our FSM Context
+#include "Events.h"       // The shared Event struct and enum
 
-// Paso 1: Definir los estados de nuestro sistema
-enum EstadoDelSistema {
-  CONFIGURANDO,
-  JUEGO_MANUAL,
-  JUEGO_AUTOMATICO,
-  SINCRONIZANDO
-};
+/****************************************************************
+ * Defines and Constants
+ ****************************************************************/
+#define STATE_MANAGER_TASK_STACK_SIZE 4096 // 4KB
+#define STATE_MANAGER_TASK_PRIORITY 1
 
-// Paso 2: Definir los eventos que pueden ocurrir
-enum Evento {
-  EVENTO_EMPEZAR_MANUAL,
-  EVENTO_EMPEZAR_AUTOMATICO,
-  EVENTO_FIN_JUEGO,
-  EVENTO_INTERRUPTOR_A_ONLINE
-};
+/****************************************************************
+ * Global Variables
+ ****************************************************************/
+/**
+ * @brief Global pointer to the main StateManager instance.
+ * Created in setup() and used by the FSM task and loop().
+ */
+StateManager* g_stateManager = nullptr;
 
-// Variable para guardar el estado actual. 'volatile' es importante si una ISR la modifica.
-volatile EstadoDelSistema estadoActual = CONFIGURANDO;
+/****************************************************************
+ * Task Function Prototypes
+ ****************************************************************/
+/**
+ * @brief The main FreeRTOS task that runs the StateManager's
+ * execute loop continuously.
+ */
+void stateManagerTask(void* parameter);
 
-// Handle para la cola de eventos
-QueueHandle_t colaDeEventos;
-
-// Declaración de la función de la tarea para que setup() la conozca
-void orquestadorTask(void *parameter);
-
+/****************************************************************
+ * Setup Function
+ ****************************************************************/
 
 void setup() {
-  Serial.begin(115200);
-  Serial.println("--- Sistema de Recompensas Iniciado ---");
+    // 1. Initialize Serial Monitor
+    Serial.begin(115200);
+    // Wait a moment for the monitor to connect
+    vTaskDelay(1000 / portTICK_PERIOD_MS); 
+    Serial.println("\n--- FSM Test Rig Initializing ---");
 
-  // Paso 3: Crear la cola. Puede almacenar hasta 10 eventos de tipo 'Evento'.
-  colaDeEventos = xQueueCreate(10, sizeof(Evento));
+    // 2. Create the StateManager instance
+    // (Its constructor creates the event queue and the initial ConfigState)
+    g_stateManager = new StateManager();
 
-  if (colaDeEventos == NULL) {
-    Serial.println("Error creando la cola de eventos!");
-    while(1); // Detener si hay un error crítico
-  }
-
-  // Paso 4: Crear la tarea del orquestador
-  xTaskCreate(
-      orquestadorTask,    // Función que implementa la tarea
-      "Orquestador",      // Nombre de la tarea (para depuración)
-      4096,               // Tamaño de la pila en palabras (4KB)
-      NULL,               // Parámetros de la tarea (ninguno)
-      1,                  // Prioridad (1 es una prioridad baja)
-      NULL                // Handle de la tarea (no lo necesitamos)
-  );
-
-  Serial.println("Orquestador iniciado. Estado actual: CONFIGURANDO");
-  Serial.println("Escribe comandos: 'empezar_manual', 'empezar_auto', 'fin_juego', 'sincronizar'");
-}
-
-
-// La tarea principal que gestiona la máquina de estados
-void orquestadorTask(void *parameter) {
-  Evento eventoRecibido;
-
-  while (true) {
-    // Paso 5: Esperar (bloquearse) hasta que llegue un evento a la cola.
-    // El 'portMAX_DELAY' hace que espere indefinidamente.
-    if (xQueueReceive(colaDeEventos, &eventoRecibido, portMAX_DELAY)) {
-      
-      Serial.printf("\n[Orquestador] Evento recibido: %d\n", eventoRecibido);
-
-      // Lógica de transición basada en el estado actual Y el evento recibido
-      switch (estadoActual) {
-        
-        case CONFIGURANDO:
-          if (eventoRecibido == EVENTO_EMPEZAR_MANUAL) {
-            estadoActual = JUEGO_MANUAL;
-            Serial.println("[Orquestador] Transición a -> JUEGO_MANUAL");
-            // Aquí llamarías a: manualController.iniciar();
-            // Y a: webServerManager.detener();
-          } 
-          else if (eventoRecibido == EVENTO_EMPEZAR_AUTOMATICO) {
-            estadoActual = JUEGO_AUTOMATICO;
-            Serial.println("[Orquestador] Transición a -> JUEGO_AUTOMATICO");
-            // Aquí llamarías a: autoController.iniciar();
-          }
-          else if (eventoRecibido == EVENTO_INTERRUPTOR_A_ONLINE) {
-            estadoActual = SINCRONIZANDO;
-            Serial.println("[Orquestador] Transición a -> SINCRONIZANDO");
-            // Aquí llamarías a: supabaseManager.iniciarSincronizacion();
-          }
-          break;
-
-        case JUEGO_MANUAL:
-        case JUEGO_AUTOMATICO:
-          if (eventoRecibido == EVENTO_FIN_JUEGO) {
-            estadoActual = CONFIGURANDO;
-            Serial.println("[Orquestador] Transición a -> CONFIGURANDO");
-            // Aquí llamarías a: manualController.detener() o autoController.detener();
-            // Y a: webServerManager.iniciar();
-          }
-          break;
-
-        case SINCRONIZANDO:
-          // En este ejemplo, la sincronización es instantánea.
-          // En la vida real, otra tarea haría el trabajo y al final
-          // enviaría un evento "EVENTO_SINC_TERMINADA".
-          Serial.println("[Orquestador] Sincronización finalizada (simulado). Volviendo a CONFIGURANDO.");
-          estadoActual = CONFIGURANDO;
-          break;
-      }
+    if (g_stateManager == nullptr) {
+        Serial.println("FATAL ERROR: Failed to create StateManager!");
+        while(1);
     }
-  }
+
+    // 3. Create the StateManager's dedicated task
+    xTaskCreate(
+        stateManagerTask,         // Task function
+        "StateManagerTask",       // Task name (for debugging)
+        STATE_MANAGER_TASK_STACK_SIZE, // Stack size
+        NULL,                     // Task parameters
+        STATE_MANAGER_TASK_PRIORITY,  // Task priority
+        NULL                      // Task handle (not needed)
+    );
+
+    Serial.println("StateManager task started successfully.");
+    Serial.println("\n--- Event Simulation Ready ---");
+    Serial.println("Send commands via Serial Monitor (No new line/CR):");
+    Serial.println(" 'o' -> Simulate switch to ONLINE");
+    Serial.println(" 'f' -> Simulate switch to OFFLINE");
+    Serial.println(" 's' -> Simulate SYNC_COMPLETED");
 }
 
-// El loop() ahora solo simula la llegada de eventos desde el exterior
+/****************************************************************
+ * Main FSM Task
+ ****************************************************************/
+
+void stateManagerTask(void* parameter) {
+    Serial.println("[StateManagerTask] Task running.");
+    while (true) {
+        // 4. Continuously run the StateManager's execute loop
+        if (g_stateManager != nullptr) {
+            g_stateManager->execute();
+        }
+
+        // 5. Yield to other tasks.
+        // This delay controls how often the FSM execute() runs.
+        vTaskDelay(10 / portTICK_PERIOD_MS); // Run every 10ms
+    }
+}
+
+/****************************************************************
+ * Loop Function (Event Simulator)
+ ****************************************************************/
+
 void loop() {
-  if (Serial.available() > 0) {
-    String command = Serial.readStringUntil('\n');
-    command.trim();
-    
-    Evento eventoAEnviar;
-    bool comandoValido = true;
+    // This loop() acts as our event simulator.
+    // It runs in parallel to the stateManagerTask.
 
-    if (command == "empezar_manual") {
-      eventoAEnviar = EVENTO_EMPEZAR_MANUAL;
-    } else if (command == "empezar_auto") {
-      eventoAEnviar = EVENTO_EMPEZAR_AUTOMATICO;
-    } else if (command == "fin_juego") {
-      eventoAEnviar = EVENTO_FIN_JUEGO;
-    } else if (command == "sincronizar") {
-      eventoAEnviar = EVENTO_INTERRUPTOR_A_ONLINE;
-    } else {
-      comandoValido = false;
-      Serial.println("Comando no reconocido.");
+    if (Serial.available() > 0) {
+        // 6. Read the command character from Serial
+        char command = Serial.read();
+
+        // Ensure we have a valid StateManager and queue
+        if (g_stateManager == nullptr) return;
+        QueueHandle_t queue = g_stateManager->getEventQueue();
+        if (queue == nullptr) return;
+
+        // 7. Create the event on the stack
+        Event event;
+        bool sendEvent = true;
+
+        // 8. Translate the character to an Event
+        switch (command) {
+            case 'o':
+                event.type = EVENT_MODE_ONLINE_ACTIVATED;
+                Serial.println("\n[SIMULATOR] Sending EVENT_MODE_ONLINE_ACTIVATED...");
+                break;
+            
+            case 'f':
+                event.type = EVENT_MODE_OFFLINE_ACTIVATED;
+                Serial.println("\n[SIMULATOR] Sending EVENT_MODE_OFFLINE_ACTIVATED...");
+                break;
+            
+            case 's':
+                event.type = EVENT_SYNC_COMPLETED;
+                Serial.println("\n[SIMULATOR] Sending EVENT_SYNC_COMPLETED...");
+                break;
+
+            default:
+                sendEvent = false;
+                Serial.printf("[SIMULATOR] Unknown command: '%c'\n", command);
+                break;
+        }
+
+        // 9. Send a *copy* of the event to the queue
+        if (sendEvent) {
+            if (xQueueSend(queue, &event, 0) != pdTRUE) {
+                Serial.println("[SIMULATOR] ERROR: Event queue is full!");
+            }
+        }
     }
 
-    if (comandoValido) {
-      Serial.printf("Enviando evento a la cola: %d\n", eventoAEnviar);
-      // Enviamos el evento a la cola del orquestador
-      xQueueSend(colaDeEventos, &eventoAEnviar, portMAX_DELAY);
-    }
-  }
-  
-  //blink bloqueante
-  digitalWrite(2, HIGH);   // Encender el LED
-  delay(100);                       // Esperar 100 ms
-  digitalWrite(2, LOW);    // Apagar el LED 
-
-  // El loop puede hacer otras cosas no críticas aquí, como leer un sensor
-  // que no necesita una respuesta inmediata.
-  //vTaskDelay(100 / portTICK_PERIOD_MS); // Pequeña pausa
+    // Give other tasks (like the Serial task) time to run
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 }
