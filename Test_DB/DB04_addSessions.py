@@ -92,17 +92,17 @@ if __name__ == '__main__':
     device_token = login('lanzador_01@device.test', 'lanzador_01')
     device_code = 'ESP32-001'
 
-    # Ejemplo individual (descomentar para probar la version simple)
-    # record_one(
-    #     dog_code='LUNA-002',
-    #     started_at='2025-10-12T10:30:00Z',
-    #     duration_s=33,
-    #     result='success',
-    #     conditions={'temp': 22.0, 'wind': 'SO 10km/h'},
-    #     typ={'scent': 'Explosivos', 'mode': 'con distraccion de comida'},
-    #     device_code=device_code,
-    #     device_token=device_token,
-    # )
+     #Ejemplo individual (descomentar para probar la version simple)
+    record_one(
+         dog_code='LUNA-002',
+         started_at='2025-10-31T16:44:00Z',
+         duration_s=19,
+         result='success',
+         conditions={'temp': 20.0, 'wind': 'SO 1km/h'},
+         typ={'scent': 'Explosivos', 'mode': 'inicial'},
+         device_code=device_code,
+         device_token=device_token
+     )
 
     # Ejemplo batch usando record_training_batch(jsonb)
 #    sessions = [
