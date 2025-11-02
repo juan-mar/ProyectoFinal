@@ -3,37 +3,42 @@
  * @brief Implements the ConfigState class logic.
  ****************************************************************/
 
- /****************************************************************
+/****************************************************************
  * Headers
  ****************************************************************/
 #include "ConfigState.h"
 #include "StateManager.h"
-//#include "DataManager.h"
+#include "DataManager.h"
 #include "Events.h"
-#include "Config.h"
+#include "config.h"
 
-// Include headers for states we can transition to
+// States we can transition to
 #include "SyncState.h"
-// #include "ManualPlayState.h"  
-// #include "AutoPlayState.h"   
+// #include "ManualPlayState.h"
+// #include "AutoPlayState.h"
 
 /****************************************************************
- * Defines
+ * Defines and Constants
  ****************************************************************/
+/**
+ * @brief The "tick rate" for this state in milliseconds.
+ * How often the update() loop will run (e.g., for the web server).
+ */
 #define CONFIG_STATE_TICK_MS 20
 
 /****************************************************************
  * Class Method Implementations
  ****************************************************************/
+
 ConfigState::ConfigState(DataManager* dataManager) 
-    : dataManager(dataManager)
+    : dataManager(dataManager) // Constructor stores the pointer
 {
-    // this->webServer = new WebServerManager(); // Se peude crear serverWeb ahí 
+    // this->webServer = new WebServerManager(); // se podria crear server aca
 }
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
-    
+    //TODO:
     // String dogList = dataManager->readDogList();
     // webServer->start(dogList);
 }
@@ -42,7 +47,6 @@ void ConfigState::execute(StateManager* manager) {
     Event event;
     QueueHandle_t queue = manager->getEventQueue();
 
-    // 1. Bloqueo con timeout (para permitir el update periódico)
     if (xQueueReceive(queue, &event, CONFIG_STATE_TICK_MS / portTICK_PERIOD_MS) == pdTRUE) {
         handleEvent(manager, event);
     }
@@ -52,8 +56,12 @@ void ConfigState::execute(StateManager* manager) {
 
 void ConfigState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting ConfigState...");
-    // TODO: Stop and shut down the WebServerManager here
+    // webServer->stop();
 }
+
+/****************************************************************
+ * Protected Methods
+ ****************************************************************/
 
 void ConfigState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
@@ -78,6 +86,6 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
 }
 
 void ConfigState::update(StateManager* manager) {
-    // Lógica periódica
+    // Lógica periódica (ej. cada 20ms)
     // webServer->handleClient();
 }
