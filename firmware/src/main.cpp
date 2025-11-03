@@ -69,15 +69,24 @@ void setup() {
     
     // 4. Create the StateManager's dedicated task
     xTaskCreate(
-        stateManagerTask,         // Task function
-        "StateManagerTask",       // Task name (for debugging)
-        STATE_MANAGER_TASK_STACK_SIZE, // Stack size
-        NULL,                     // Task parameters
-        STATE_MANAGER_TASK_PRIORITY,  // Task priority
-        NULL                      // Task handle
+        stateManagerTask,               // Task function
+        "StateManagerTask",             // Task name (for debugging)
+        STATE_MANAGER_TASK_STACK_SIZE,  // Stack size
+        NULL,                           // Task parameters
+        STATE_MANAGER_TASK_PRIORITY,    // Task priority
+        NULL                            // Task handle
     );
 
     LOG_PRINTLN("Setup complete. FSM task is running.");
+    
+    // --- Instrucciones para el simulador ---
+    LOG_PRINTLN("\n--- Event Simulator Ready ---");
+    LOG_PRINTLN("Send commands via Serial Monitor (No new line/CR):");
+    LOG_PRINTLN(" 'o' -> EVENT_MODE_ONLINE_ACTIVATED");
+    LOG_PRINTLN(" 'f' -> EVENT_MODE_OFFLINE_ACTIVATED");
+    LOG_PRINTLN(" 's' -> EVENT_SYNC_COMPLETED (Simulate)");
+    LOG_PRINTLN(" 'e' -> EVENT_SYNC_FAILED (Simulate)");
+    LOG_PRINTLN(" 'p' -> EVENT_START_MANUAL_PLAY (Simulate 'Play')");
 }
 
 /****************************************************************
@@ -100,6 +109,54 @@ void stateManagerTask(void* parameter) {
  * Loop Function
  ****************************************************************/
 void loop() {
-    // Empty
-    vTaskDelay(10);
+    // Simulate events via Serial input for testing purposes
+    #if DEBUG_MODE == 1
+        if (Serial.available() > 0) {
+            char command = Serial.read();
+
+            // Asegurarse de que el StateManager ya esté creado
+            if (g_stateManager == nullptr) return;
+            QueueHandle_t queue = g_stateManager->getEventQueue();
+            if (queue == nullptr) return;
+
+            Event event;
+            bool sendEvent = true;
+            event.type = EVENT_NULL;
+
+            switch (command) {
+                case 'o': // Online
+                    event.type = EVENT_MODE_ONLINE_ACTIVATED;
+                    break;
+                
+                case 'f': // Offline
+                    event.type = EVENT_MODE_OFFLINE_ACTIVATED;
+                    break;
+                
+                case 's': // Sync Success
+                    event.type = EVENT_SYNC_COMPLETED;
+                    break;
+                
+                case 'e': // Sync Error/Failed
+                    event.type = EVENT_SYNC_FAILED;
+                    break;
+                
+                case 'p': // Play
+                    event.type = EVENT_START_MANUAL_PLAY;
+                    break;
+
+                default:
+                    sendEvent = false;
+                    LOG_PRINTF("Simulator: Unknown command '%c'\n", command);
+                    break;
+            }
+
+            if (sendEvent) {
+                LOG_PRINTF("\n[SIMULATOR] Sending Event: %d\n", event.type);
+                if (xQueueSend(queue, &event, 0) != pdTRUE) {
+                    LOG_PRINTLN("[SIMULATOR] ERROR: Event queue is full!");
+                }
+            }
+        }
+    #endif
+    vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid busy loop
 }
