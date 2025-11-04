@@ -14,6 +14,7 @@ static int barrier = 0;
 static bool in_thres = false;
 
 static bool calibrating = false;
+static bool detecting = false;
 static bool new_msg = false;
 static unsigned long lastSampleTime = 0;
 
@@ -32,29 +33,11 @@ Receptor::Receptor() {
   //macAddr = 0;
   rssi_display = 0;
 
-  // Set device as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);
-
-  // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
-  
-  // Once ESPNow is successfully Init, we will register for recv CB to
-  // get recv packer info
-  esp_now_register_recv_cb(OnDataRecv);
-
-  //CB para el RSSI`
-  esp_wifi_set_promiscuous(true);
-  esp_wifi_set_promiscuous_rx_cb(&promiscuous_rx_cb);
-
-
 }
 
 Receptor::~Receptor() {
-  WiFi.mode(WIFI_OFF);
-  esp_now_deinit();
+  //WiFi.mode(WIFI_OFF);
+  //esp_now_deinit();
 }
 
 bool Receptor::calibracion() {
@@ -79,7 +62,6 @@ bool Receptor::calibracion() {
     samples[sampleCount - 1] = rssi_calib;
     Serial.print("sampleCount: ");
     Serial.println(sampleCount);
-    //sum_var += (((rssi_calib - (sumRSSI / sampleCount)) * (rssi_calib - (sumRSSI / sampleCount))) / sampleCount);
     
     return true;
   }
@@ -118,6 +100,7 @@ bool Receptor::calibracion() {
 }
 
 bool Receptor::detect_thres() {
+  detecting = true;
   int rssi_curr = rssi_filtered;
   if (rssi_curr > this->threshold) {
     in_thres = true;
@@ -126,12 +109,14 @@ bool Receptor::detect_thres() {
   else if (rssi_curr < barrier) {
     in_thres = false;
     return false; // señal no detectada
+    detecting = false;
   } 
   else if (in_thres) {
     return true; // señal detectada
   }
   else {
     return false; // señal no detectada
+    detecting = false;
   }
 }
 
@@ -174,7 +159,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   //  Serial.print("Mensaje recibido: ");
   //  Serial.println(paquete_datos.word);
  
-  if(!calibrating)
+  if(!calibrating && !detecting)
   {
     Serial.print("RSSI: ");
     Serial.println(rssi_display);

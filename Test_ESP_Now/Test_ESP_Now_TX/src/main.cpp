@@ -76,7 +76,7 @@ void setup() {
     //digitalWrite(5, !digitalRead(5));
     //digitalWrite(5, !digitalRead(5)); // Cambia el estado del pin 5
   } else {
-    //Serial.println("Error al enviar");
+    Serial.println("Error al enviar");
   }
 
   delay(50); // Da tiempo a que se complete la transmisión
@@ -85,7 +85,7 @@ void setup() {
   // Configura el wake-up cada 0,1 segundo
   esp_sleep_enable_timer_wakeup(1 * 100000);
 
-  Serial.println("Entrando en deep sleep...");
+  //Serial.println("Entrando en deep sleep...");
   esp_deep_sleep_start();
 }
 
