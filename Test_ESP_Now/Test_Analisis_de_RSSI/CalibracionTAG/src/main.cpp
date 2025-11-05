@@ -1,39 +1,63 @@
-/*
-  Rui Santos & Sara Santos - Random Nerd Tutorials
-  Complete project details at https://RandomNerdTutorials.com/get-change-esp32-esp8266-mac-address-arduino/
-  Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files.  
-  The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
 #include <Arduino.h>
-#include <WiFi.h>
-#include <esp_wifi.h>
+#include "tag.h"
+
+#define THRES_TIME 3000
+
+// Variables globales
+Receptor rx;
+
+bool calib = false;
+bool detected = false;
 
 
-void readMacAddress(){
-  uint8_t baseMac[6];
-  esp_err_t ret = esp_wifi_get_mac(WIFI_IF_STA, baseMac);
-  if (ret == ESP_OK) {
-    Serial.printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
-                  baseMac[0], baseMac[1], baseMac[2],
-                  baseMac[3], baseMac[4], baseMac[5]);
-  } else {
-    Serial.println("Failed to read MAC address");
-  }
-}
-
-void setup(){
+void setup() {
+  // Initialize Serial Monitor
   Serial.begin(115200);
 
+    // Set device as a Wi-Fi Station
   WiFi.mode(WIFI_STA);
-  WiFi.STA.begin();
 
-  Serial.print("[DEFAULT] ESP32 Board MAC Address: ");
-  readMacAddress();
+  Serial.println("Entrando en set up");
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+    return;
+  }
+  
+  // Once ESPNow is successfully Init, we will register for recv CB to
+  // get recv packer info
+  esp_now_register_recv_cb(OnDataRecv);
+
+  //CB para el RSSI`
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_promiscuous_rx_cb(&promiscuous_rx_cb);
+
+  
+
 }
- 
-void loop(){
 
+void loop() {
+  // put your main code here, to run repeatedly:
+  if (Serial.available() > 0 || calib) { // si hay datos disponibles en el puerto serie
+    char ok = Serial.read();           // leer un carácter
+    if (ok == 'c' || calib) {          // si el carácter es 'c'
+      calib = rx.calibracion();        // llamar a la función calibracion
+    }
+    else if (ok == 'd' || detected) {               // si el carácter es 'd' o ya se detecto la señal
+      static unsigned long calibStart = millis();
+      unsigned long now = millis();
+      detected = rx.detect_thres(); // llamar a la función detect_thres
+      if (detected && now - calibStart < THRES_TIME) {
+        Serial.println("Dentro del umbral");
+      } 
+      else if(detected && now - calibStart >= THRES_TIME) {
+        Serial.println("Señal detectada!");
+      }
+      else {
+        Serial.println("Fuera del umbral");
+      }
+  }
 }
-
+}
 // put function definitions here:
