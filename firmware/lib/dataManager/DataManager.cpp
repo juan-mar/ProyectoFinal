@@ -27,7 +27,7 @@ DataManager::DataManager() {
 
 bool DataManager::init() {
     LOG_PRINTLN("Initializing DataManager...");
-    
+
     if (!LittleFS.begin()) {
         LOG_PRINTLN("Failed to mount LittleFS! Formatting...");
         // If mounting fails, format it once

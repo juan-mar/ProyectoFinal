@@ -17,6 +17,7 @@
 #include <Preferences.h> // For NVS
 #include "FS.h"       // For File System base class
 #include "LittleFS.h" // For LittleFS implementation
+#include <freertos/semphr.h>
 
 /****************************************************************
  * Class Declarations
@@ -89,6 +90,13 @@ public:
     String readDogList();
 
     /**
+     * @brief Appends a single session to the log file. Uses Mutex.
+     * @param session The TrainingSession object to serialize and save.
+     * @return true if append was successful.
+     */
+    bool saveSessionLog(String jsonString);
+
+    /**
      * @brief Appends a single session (as a JSON string) to the log file.
      * @param jsonString The JSON string for the single session.
      * @return true if append was successful.
@@ -116,6 +124,7 @@ public:
 
 private:
     Preferences prefs;
+    SemaphoreHandle_t storageMutex;
     const char* PREFS_NAMESPACE = "config";
     const char* FILE_DOG_LIST = "/dog_list.json";
     const char* FILE_SESSIONS = "/sessions.log";
