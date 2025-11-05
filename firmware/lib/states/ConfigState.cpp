@@ -38,6 +38,7 @@ ConfigState::ConfigState(DataManager* dataManager)
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
+    PIN_LOW(2); // Turn on debug LED to indicate ConfigState
     //TODO:
     // String dogList = dataManager->readDogList();
     // webServer->start(dogList);

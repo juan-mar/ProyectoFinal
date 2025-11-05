@@ -31,7 +31,7 @@
  * si el usuario lo mueve a OFFLINE (LOW).
  * (0 = LOW, 1 = HIGH)
  */
-#define MODE_SWITCH_WAKEUP_LEVEL 0 // Wake on LOW signal (Offline)
+#define MODE_SWITCH_WAKEUP_LEVEL 1 // Wake on high signal (Offline)
 
 /****************************************************************
  * Class Method Implementations
@@ -52,9 +52,15 @@ void IdleState::enter(StateManager* manager) {
         (MODE_SWITCH_WAKEUP_LEVEL == 0) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
     
     esp_sleep_enable_gpio_wakeup();
+    
+    
+    
+    PIN_HIGH(2); // Turn off debug LED to indicate sleep
 
     // 2. Entrar en modo de sueño ligero
     LOG_PRINTLN("Going to light sleep. Zzz...");
+    LOG_FLUSH();
+
     esp_light_sleep_start();
 
     // --- ¡EL CÓDIGO SE REANUDA AQUÍ DESPUÉS DE DESPERTAR! ---
@@ -68,8 +74,14 @@ void IdleState::enter(StateManager* manager) {
         LOG_PRINTLN("Wakeup caused by GPIO (Mode Switch).");
         // Asumimos que el evento es ir a OFFLINE
         ev.type = EVENT_MODE_OFFLINE_ACTIVATED;
-    } else {
-        LOG_PRINTLN("Woke up for unknown reason.");
+    } else if (cause == ESP_SLEEP_WAKEUP_UART) {
+        LOG_PRINTLN("Wakeup cause UART.");
+        // En el arranque inicial, vamos a ConfigState
+        ev.type = EVENT_MODE_OFFLINE_ACTIVATED;
+    } else  {
+        LOG_PRINT("Woke up for unknown reason.");
+        LOG_PRINTLN(cause);
+        
         // Por seguridad, volvemos a ConfigState
         ev.type = EVENT_MODE_OFFLINE_ACTIVATED;
     }

@@ -43,6 +43,8 @@ void stateManagerTask(void* parameter);
  * Setup Function
  ****************************************************************/
 void setup() {
+    PIN_MODE(2, OUTPUT); // Example: Set pin 2 as output for debug LED
+    PIN_LOW(2);          // Turn on debug LED
     // 1. Initialize Serial Monitor (only in debug mode)
     LOG_SETUP(115200);
     vTaskDelay(1000 / portTICK_PERIOD_MS); 
@@ -158,5 +160,6 @@ void loop() {
             }
         }
     #endif
+
     vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid busy loop
 }
