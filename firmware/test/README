@@ -9,3 +9,6 @@ in the development cycle.
 
 More information about PlatformIO Unit Testing:
 - https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+
+RAM:   [=         ]   7.0% (used 22892 bytes from 327680 bytes)
+Flash: [===       ]  26.0% (used 341197 bytes from 1310720 bytes)
