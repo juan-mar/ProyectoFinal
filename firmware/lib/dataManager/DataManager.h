@@ -33,13 +33,34 @@ public:
      * @brief Constructor
      */
     DataManager();
-
+    
     /**
-     * @brief Initializes the memory components (NVS and LittleFS).
-     * Must be called once in setup().
+     * @brief Destructor.
+     * Cleans up system resources.
+     */
+    ~DataManager();
+    
+    /**
+     * @brief Initializes peripherals (NVS, LittleFS).
+     * This function is idempotent (safe to call multiple times).
      * @return true if all components initialized successfully.
      */
     bool init();
+
+//---- State Management Methods ----------------------------
+
+    /**
+     * @brief Counts the number of session files currently pending.
+     * @return The total number of files in the session directory.
+     */
+    int countPendingSessions();
+
+    /**
+     * @brief Gets the total and used bytes on the LittleFS partition.
+     * @param totalBytes (out) A reference to store the total bytes.
+     * @param usedBytes (out) A reference to store the used bytes.
+     */
+    void getStorageUsage(size_t &totalBytes, size_t &usedBytes);
 
 //---- NVS (Preferences) Methods --------------------------------
 
@@ -90,44 +111,47 @@ public:
     String readDogList();
 
     /**
-     * @brief Appends a single session to the log file. Uses Mutex.
-     * @param session The TrainingSession object to serialize and save.
-     * @return true if append was successful.
-     */
-    bool saveSessionLog(String jsonString);
-
-    /**
      * @brief Appends a single session (as a JSON string) to the log file.
-     * @param jsonString The JSON string for the single session.
+     * This is THREAD-SAFE (uses a Mutex).
+     * @param sessionJsonString The complete JSON string for the session.
      * @return true if append was successful.
      */
-    bool appendSessionLog(String jsonString);
+    bool saveSessionFile(String sessionJsonString);
 
     /**
-     * @brief Opens the session log file for reading.
-     * Used by SyncState to read sessions in batches.
-     * @return A File object. The caller *must* close this file.
+     * @brief Opens the session directory ("/sessions") for reading.
+     * Used by SyncState to iterate through session files.
+     * @return A File object (directory). The caller *must* close this.
      */
-    File openSessionLog();
+    File openSessionDirectory();
 
     /**
-     * @brief Deletes the session log file.
-     * Called by SyncState after a successful batch upload.
+     * @brief Deletes a single session file.
+     * Called by SyncState after a file is successfully uploaded.
+     * @param path The full path to the file (e.g., "/sessions/123456.json").
      */
-    void deleteSessionLog();
+    void deleteSessionFile(String path);
 
     /**
-     * @brief Checks if a session log file exists.
-     * @return true if the file exists and is not empty.
+     * @brief Checks if any session files are pending upload.
+     * @return true if the /sessions directory exists and is not empty.
      */
-    bool sessionLogExists();
+    bool sessionFilesExist();
+
+    SemaphoreHandle_t getMutex();
 
 private:
     Preferences prefs;
     SemaphoreHandle_t storageMutex;
     const char* PREFS_NAMESPACE = "config";
     const char* FILE_DOG_LIST = "/dog_list.json";
-    const char* FILE_SESSIONS = "/sessions.log";
+    const char* DIR_SESSIONS = "/sessions";
+
+    /**
+     * @brief Flag to make init() idempotent.
+     */
+    bool isInitialized;
+    
 };
 
 #endif // DATA_MANAGER_H

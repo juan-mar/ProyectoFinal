@@ -21,26 +21,95 @@
  * Class Method Implementations
  ****************************************************************/
 
-DataManager::DataManager() {
+DataManager::DataManager() : isInitialized(false){
+    storageMutex = xSemaphoreCreateMutex();
+    if (storageMutex == NULL) {
+        LOG_PRINTLN("FATAL: Failed to create storageMutex!");
+    }   
+}
+
+DataManager::~DataManager() {
+    LOG_PRINTLN("DataManager: Destructor called.");
     
+    if (storageMutex != NULL) {
+        vSemaphoreDelete(storageMutex);
+    }
 }
 
 bool DataManager::init() {
-    LOG_PRINTLN("Initializing DataManager...");
+LOG_PRINTLN("Initializing DataManager...");
+    if (isInitialized) {
+        return true;
+    }
 
+    if (storageMutex == NULL) {
+        LOG_PRINTLN("FATAL: Failed to create storageMutex!");
+        return false;
+    }
+    
+    // 2. Montar LittleFS
     if (!LittleFS.begin()) {
         LOG_PRINTLN("Failed to mount LittleFS! Formatting...");
-        // If mounting fails, format it once
         if (LittleFS.format()) {
             LOG_PRINTLN("LittleFS formatted successfully.");
-            return LittleFS.begin(); // Try mounting again
+            return LittleFS.begin();
         } else {
             LOG_PRINTLN("FATAL: Failed to format LittleFS.");
             return false;
         }
     }
     LOG_PRINTLN("LittleFS mounted.");
+    
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        if (!LittleFS.exists(DIR_SESSIONS)) {
+            LOG_PRINTLN("Session directory not found, creating...");
+            LittleFS.mkdir(DIR_SESSIONS);
+        }
+        xSemaphoreGive(storageMutex);
+    }
+    
+    isInitialized = true;
     return true;
+}
+
+int DataManager::countPendingSessions() {
+    int count = 0;
+    LOG_PRINTLN("DataManager: Counting session files...");
+
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        
+        File root = LittleFS.open(DIR_SESSIONS, "r");
+        if (root) {
+            File file = root.openNextFile();
+            while (file) {
+                // Nos aseguramos de que no sea un directorio
+                if (!file.isDirectory()) {
+                    count++;
+                }
+                file.close();
+                file = root.openNextFile();
+            }
+            root.close();
+        } else {
+            LOG_PRINTLN("DataManager: Failed to open session directory.");
+        }
+        
+        xSemaphoreGive(storageMutex);
+    }
+    
+    LOG_PRINTF("DataManager: Found %d pending sessions.\n", count);
+    return count;
+}
+
+void DataManager::getStorageUsage(size_t &totalBytes, size_t &usedBytes) {
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        totalBytes = LittleFS.totalBytes();
+        usedBytes = LittleFS.usedBytes();
+        xSemaphoreGive(storageMutex);
+    } else {
+        totalBytes = 0;
+        usedBytes = 0;
+    }
 }
 
 //---- NVS (Preferences) Methods --------------------------------
@@ -83,58 +152,88 @@ String DataManager::getWifiPassword() {
 //---- LittleFS Methods -----------------------------------------
 
 void DataManager::saveDogList(String jsonString) {
-    File file = LittleFS.open(FILE_DOG_LIST, "w"); // "w" = Write (overwrite)
-    if (!file) {
-        LOG_PRINTLN("Failed to open dog_list for writing.");
-        return;
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        File file = LittleFS.open(FILE_DOG_LIST, "w");
+        if (file) {
+            file.print(jsonString);
+            file.close();
+        } else {
+            LOG_PRINTLN("Failed to open dog_list for writing.");
+        }
+        xSemaphoreGive(storageMutex);
     }
-    file.print(jsonString);
-    file.close();
 }
 
 String DataManager::readDogList() {
-    File file = LittleFS.open(FILE_DOG_LIST, "r"); // "r" = Read
-    if (!file) {
-        LOG_PRINTLN("Dog list file not found.");
-        return "";
+    String content = "";
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        File file = LittleFS.open(FILE_DOG_LIST, "r");
+        if (file) {
+            content = file.readString();
+            file.close();
+        } else {
+            LOG_PRINTLN("Dog list file not found.");
+        }
+        xSemaphoreGive(storageMutex);
     }
-    String content = file.readString();
-    file.close();
     return content;
 }
 
-bool DataManager::appendSessionLog(String jsonString) {
-    // "a" = Append (adds to end of file, creates if not exists)
-    File file = LittleFS.open(FILE_SESSIONS, "a");
-    if (!file) {
-        LOG_PRINTLN("Failed to open session log for appending.");
-        return false;
+bool DataManager::saveSessionFile(String sessionJsonString) {
+    bool success = false;
+    
+    String path = String(DIR_SESSIONS) + "/" + String(millis()) + ".json";
+
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        LOG_PRINTF("DataManager: Got mutex, saving session to: %s\n", path.c_str());
+        
+        File file = LittleFS.open(path, "w"); // "w" = Write
+        
+        if (!file) {
+            LOG_PRINTLN("Failed to create session file.");
+        } else {
+            if (file.print(sessionJsonString)) {
+                success = true;
+            }
+            file.close();
+        }
+        xSemaphoreGive(storageMutex);
     }
     
-    bool success = file.println(jsonString); // Use println to separate entries
-    file.close();
     return success;
 }
 
-File DataManager::openSessionLog() {
-    // Returns the File object to be read by SyncState
-    return LittleFS.open(FILE_SESSIONS, "r");
+File DataManager::openSessionDirectory() {
+    return LittleFS.open(DIR_SESSIONS, "r");
 }
 
-void DataManager::deleteSessionLog() {
-    if (LittleFS.remove(FILE_SESSIONS)) {
-        LOG_PRINTLN("Session log deleted.");
+void DataManager::deleteSessionFile(String path) {
+    // Esta función debe ser llamada por la SyncTask MIENTRAS
+    // todavía tiene el Mutex.
+    if (LittleFS.remove(path)) {
+        LOG_PRINTF("Deleted session file: %s\n", path.c_str());
     } else {
-        LOG_PRINTLN("Error deleting session log (may not exist).");
+        LOG_PRINTF("Error deleting session file: %s\n", path.c_str());
     }
 }
 
-bool DataManager::sessionLogExists() {
-    if (LittleFS.exists(FILE_SESSIONS)) {
-        File f = LittleFS.open(FILE_SESSIONS, "r");
-        bool hasContent = f.size() > 0;
-        f.close();
-        return hasContent;
+bool DataManager::sessionFilesExist() {
+    bool filesFound = false;
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        File root = LittleFS.open(DIR_SESSIONS, "r");
+        if (root) {
+            File file = root.openNextFile();
+            if (file) {
+                filesFound = true;
+                file.close();
+            }
+            root.close();
+        }
+        xSemaphoreGive(storageMutex);
     }
-    return false;
+    return filesFound;
+}
+
+SemaphoreHandle_t DataManager::getMutex() {
+    return storageMutex;
 }
