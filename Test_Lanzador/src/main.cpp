@@ -25,11 +25,11 @@ void setup() {
   Serial.begin(115200);
   pinMode(PULSE_PIN, OUTPUT);
   digitalWrite(PULSE_PIN, LOW);
+
   pinMode(TRIG_PIN, OUTPUT);
   digitalWrite(TRIG_PIN, LOW);
 
   while (!Serial) {
-    ;
   }
 
   Serial.println(F("Listo: envie 'P' por serial para generar un pulso"));
@@ -42,7 +42,7 @@ void loop() {
 
   char incoming = static_cast<char>(Serial.read());
   if (incoming == 'P') {
-    sendPulse();
+    sendPulseInv();
     Serial.println(F("Pulso enviado"));
   }
 }
