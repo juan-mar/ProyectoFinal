@@ -22,8 +22,8 @@
  * Class Method Implementations
  ****************************************************************/
 
-StateManager::StateManager(DataManager* dataManager) 
-                : currentState(nullptr), dataManager(dataManager)
+StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseClient) 
+                : currentState(nullptr), dataManager(dataManager), supabaseClient(supabaseClient)
 {
     eventQueue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(Event));
 

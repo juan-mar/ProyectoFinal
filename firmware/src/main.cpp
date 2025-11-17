@@ -10,6 +10,7 @@
 #include "config.h"       // For LOG_... macros
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
+#include "SupabaseClient.h"
 
 /****************************************************************
  * Defines and Constants
@@ -29,6 +30,8 @@ StateManager* g_stateManager = nullptr;
  * @brief Global pointer to the main DataManager (NVS/FS).
  */
 DataManager* g_dataManager = nullptr;
+
+SupabaseClient* g_supabaseClient = nullptr;
 
 /****************************************************************
  * Task Function Prototypes
@@ -66,7 +69,7 @@ void setup() {
     }
 
     // 3. Create StateManager and inject DataManager dependency
-    g_stateManager = new StateManager(g_dataManager); 
+    g_stateManager = new StateManager(g_dataManager, g_supabaseClient); 
     LOG_PRINTLN("StateManager initialized. Starting FSM...");
     
     // 4. Create the StateManager's dedicated task

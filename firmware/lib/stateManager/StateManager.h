@@ -38,7 +38,7 @@ public:
      * @brief Constructor.
      * @param dataManager A pointer to the global DataManager instance.
      */
-    StateManager(DataManager* dataManager);
+    StateManager(DataManager* dataManager, SupabaseClient* supabaseClient);
 
     /**
      * @brief Cleans up the queue and current state.
