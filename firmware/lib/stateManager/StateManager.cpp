@@ -87,3 +87,7 @@ QueueHandle_t StateManager::getEventQueue() const {
 DataManager* StateManager::getDataManager() const {
     return dataManager;
 }
+
+SupabaseClient* StateManager::getSupabaseClient() const {
+    return supabaseClient;
+}

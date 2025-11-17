@@ -6,6 +6,7 @@
 /****************************************************************
  * Headers
  ****************************************************************/
+#include <Arduino.h>
 #include "SyncState.h"
 #include "StateManager.h"
 #include "DataManager.h"
@@ -275,12 +276,12 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_SYNC_COMPLETED:
             LOG_PRINTLN("[SyncState] Event: Sync Completed. Changing to IdleState.");
-            manager->changeState(new IdleState(dataManager, supabaseClient));
+            manager->changeState(new IdleState());
             break;
 
         case EVENT_SYNC_FAILED:
             LOG_PRINTLN("[SyncState] Event: Sync FAILED. Changing to IdleState.");
-            manager->changeState(new IdleState(dataManager, supabaseClient));
+            manager->changeState(new IdleState());
             break;
         
         default:
@@ -288,5 +289,5 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
     }
 }
 
-void SyncState::update(StateManager* manager) {
+void SyncState::update(StateManager* manager){
 }

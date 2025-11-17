@@ -37,10 +37,7 @@
  * Class Method Implementations
  ****************************************************************/
 
-IdleState::IdleState(DataManager* dataManager) 
-    : dataManager(dataManager)
-{
-    // Constructor stores the pointer
+IdleState::IdleState(){
 }
 
 void IdleState::enter(StateManager* manager) {
@@ -53,8 +50,6 @@ void IdleState::enter(StateManager* manager) {
     
     esp_sleep_enable_gpio_wakeup();
     
-    
-    
     PIN_HIGH(2); // Turn off debug LED to indicate sleep
 
     // 2. Entrar en modo de sueño ligero
@@ -63,10 +58,8 @@ void IdleState::enter(StateManager* manager) {
 
     esp_light_sleep_start();
 
-    // --- ¡EL CÓDIGO SE REANUDA AQUÍ DESPUÉS DE DESPERTAR! ---
     LOG_PRINTLN("Woke up from light sleep!");
 
-    // 3. Averiguar por qué despertamos
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
     Event ev;
     
@@ -117,11 +110,10 @@ void IdleState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_OFFLINE_ACTIVATED:
             LOG_PRINTLN("[IdleState] Event: Mode OFFLINE. Changing to ConfigState.");
-            manager->changeState(new ConfigState(dataManager));
+            manager->changeState(new ConfigState(manager->getDataManager()));
             break;
 
         default:
-            // Ignorar otros eventos (ej. sync_completed, etc.)
             break;
     }
 }

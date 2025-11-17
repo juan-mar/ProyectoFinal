@@ -16,6 +16,7 @@
 #include <Arduino.h>
 #include <freertos/queue.h> 
 #include "Events.h"         
+#include "SupabaseClient.h"
 
 /****************************************************************
  * Forward Declarations
@@ -70,10 +71,17 @@ public:
      */
     DataManager* getDataManager() const;
 
+    /**
+     * @brief Gets the pointer to the SupabaseClient instance.
+     * @return A pointer to the SupabaseClient.
+     */
+    SupabaseClient* getSupabaseClient() const;
+
 private:
     State* currentState;
     QueueHandle_t eventQueue;
-    DataManager* dataManager; // Injected dependency
+    DataManager* dataManager;
+    SupabaseClient* supabaseClient;
 };
 
 #endif // STATEMANAGER_H

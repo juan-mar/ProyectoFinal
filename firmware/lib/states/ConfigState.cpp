@@ -9,11 +9,13 @@
 #include "ConfigState.h"
 #include "StateManager.h"
 #include "DataManager.h"
+#include "SupabaseClient.h"
 #include "Events.h"
 #include "config.h"
 
 // States we can transition to
 #include "SyncState.h"
+
 // #include "ManualPlayState.h"
 // #include "AutoPlayState.h"
 
@@ -68,7 +70,7 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
-            manager->changeState(new SyncState(dataManager)); // Pasa la dependencia
+            manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
 
         case EVENT_START_MANUAL_PLAY:
