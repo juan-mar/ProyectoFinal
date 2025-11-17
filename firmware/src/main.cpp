@@ -11,6 +11,7 @@
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
 #include "SupabaseClient.h"
+#include "Credentials.h"
 
 /****************************************************************
  * Defines and Constants
@@ -62,6 +63,10 @@ void setup() {
     }
     LOG_PRINTLN("DataManager initialized.");
     
+    // 2.5 Create SupabaseClient
+    g_supabaseClient = new SupabaseClient(SUPABASE_URL, SUPABASE_API_KEY);
+    LOG_PRINTLN("SupabaseClient initialized.");
+
     // Verificar-Opcional: Guardar un ID por defecto si no existe
     if (g_dataManager->getDeviceID() == "DEFAULT-000") {
         LOG_PRINTLN("Device ID not set. Saving default ID: ESP32-001");
