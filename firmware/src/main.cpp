@@ -12,6 +12,8 @@
 #include "DataManager.h"  // The memory/storage manager
 #include "SupabaseClient.h"
 #include "Credentials.h"
+#include "TrainingSession.h"
+
 
 /****************************************************************
  * Defines and Constants
@@ -72,6 +74,7 @@ void setup() {
         LOG_PRINTLN("Device ID not set. Saving default ID: ESP32-001");
         g_dataManager->saveDeviceID("ESP32-001");
     }
+    //g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
 
     // 3. Create StateManager and inject DataManager dependency
     g_stateManager = new StateManager(g_dataManager, g_supabaseClient); 
@@ -133,26 +136,54 @@ void loop() {
             bool sendEvent = true;
             event.type = EVENT_NULL;
 
+            // Variables auxiliares para las pruebas manuales
+            TrainingSession dummySession; 
+            String jsonStr;
+
             switch (command) {
+                // --- EVENTOS DE LA FSM ---
                 case 'o': // Online
                     event.type = EVENT_MODE_ONLINE_ACTIVATED;
                     break;
-                
                 case 'f': // Offline
                     event.type = EVENT_MODE_OFFLINE_ACTIVATED;
                     break;
-                
                 case 's': // Sync Success
                     event.type = EVENT_SYNC_COMPLETED;
                     break;
-                
                 case 'e': // Sync Error/Failed
                     event.type = EVENT_SYNC_FAILED;
                     break;
-                
-                case 'p': // Play
+                case 'm': // Manual Play
                     event.type = EVENT_START_MANUAL_PLAY;
                     break;
+                // --- PRUEBAS DE DATOS ---
+                case 'w': // Write Session (Simular fin de juego)
+                    LOG_PRINTLN("\n[Test] Simulating completed training...");
+                    // Llenamos datos falsos
+                    dummySession.setDogCode("SIMON-01"); // Asegúrate que este perro exista en tu DB o fallará el RPC
+                    dummySession.setStartedAt("2025-12-01T10:00:00Z"); 
+                    dummySession.setDuration(66);
+                    dummySession.setResult("success");
+                    dummySession.setConditions("{\"temp\":24}");
+                    dummySession.setType("{\"mode\":\"auto\"}");
+                    dummySession.setDeviceCode(g_dataManager->getDeviceID()); // Usa el ID real guardado
+
+                    if (dummySession.serialize(jsonStr)) {
+                        g_dataManager->saveSessionFile(jsonStr);
+                        LOG_PRINTLN("[Test] Session saved to LittleFS.");
+                    }
+                break;
+
+                case 'p': // Status (Ver pendientes)
+                    LOG_PRINTF("\n[Test] Pending Sessions: %d\n", g_dataManager->countPendingSessions());
+                break;
+
+                case 'l': // List Dogs (Ver archivo local)
+                    LOG_PRINTLN("\n[Test] Reading 'dog_list.json' from LittleFS:");
+                    LOG_PRINTLN(g_dataManager->readDogList());
+                    LOG_PRINTLN("--- End of List ---");
+                break;
 
                 default:
                     sendEvent = false;
