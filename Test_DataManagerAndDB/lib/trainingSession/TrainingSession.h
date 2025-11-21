@@ -54,7 +54,7 @@ private:
     // Almacenamos todos los parámetros de la RPC
     String p_dog_code;
     String p_started_at;
-    int    p_duration_s;
+    int    p_duration_s; 
     String p_result;
     String p_conditions_json; // Almacenamos como strings
     String p_type_json;       // Almacenamos como strings

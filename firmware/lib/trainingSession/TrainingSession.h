@@ -52,14 +52,14 @@ public:
 
 private:
     // Almacenamos todos los parámetros de la RPC
-    String p_dog_code;
-    String p_started_at;
-    int    p_duration_s;
-    String p_result;
-    String p_conditions_json; // Almacenamos como strings
-    String p_type_json;       // Almacenamos como strings
-    String p_device_code;
-    String p_co_trainer_id; // (Podemos añadir un setter si es necesario)
+    String p_dog_code;          //id del can
+    String p_started_at;        //horario preveniente del telefono del usuario
+    int    p_duration_s;        //delay del entrenamiento en segundos
+    String p_result;            //e.g., "success", "fail"
+    String p_conditions_json;   // Almacenamos como strings, lo carga el driver del BME280
+    String p_type_json;         // Almacenamos como strings, explosivos, narcoticos, etc.
+    String p_device_code;       //id del dispositivo, almacenado en NVS (dataManager)
+    String p_co_trainer_id;     // (Podemos añadir un setter si es necesario)
 };
 
 #endif // TRAINING_SESSION_H

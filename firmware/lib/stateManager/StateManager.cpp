@@ -70,7 +70,6 @@ void StateManager::changeState(State* newState) {
         delete currentState;
     }
 
-
     currentState = newState;
 
     if (currentState != nullptr) {
