@@ -18,6 +18,7 @@
  * Forward Declarations
  ****************************************************************/
 class DataManager;
+class TrainingSession;
 // class WebServerManager; // Futuro módulo
 
 /****************************************************************
@@ -45,6 +46,7 @@ protected:
 
 private:
     DataManager* dataManager;       // Pointer to the injected dependency
+    TrainingSession* sessionConfig; // Pointer to the injected dependency
     // WebServerManager* webServer; // Futuro puntero
 };
 

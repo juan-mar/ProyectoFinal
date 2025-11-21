@@ -9,7 +9,7 @@
 #include "ConfigState.h"
 #include "StateManager.h"
 #include "DataManager.h"
-#include "SupabaseClient.h"
+#include "TrainingSession.h"
 #include "Events.h"
 #include "config.h"
 
@@ -40,6 +40,8 @@ ConfigState::ConfigState(DataManager* dataManager)
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
+    this->sessionConfig = new TrainingSession();
+
     PIN_LOW(2); // Turn on debug LED to indicate ConfigState
     //TODO:
     // String dogList = dataManager->readDogList();
@@ -59,6 +61,11 @@ void ConfigState::execute(StateManager* manager) {
 
 void ConfigState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting ConfigState...");
+    if (this->sessionConfig != nullptr) {
+        delete this->sessionConfig;
+        this->sessionConfig = nullptr;
+        LOG_PRINTLN("ConfigState: Unused session config deleted.");
+    }
     // webServer->stop();
 }
 
@@ -76,11 +83,13 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_START_MANUAL_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
             // manager->changeState(new ManualPlayState(dataManager));
+            this->sessionConfig = nullptr;
             break;
 
         case EVENT_START_AUTO_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
             // manager->changeState(new AutoPlayState(dataManager));
+            this->sessionConfig = nullptr;
             break;
         
         default:
