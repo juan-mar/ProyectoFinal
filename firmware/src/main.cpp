@@ -11,6 +11,7 @@
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
 #include "SupabaseClient.h"
+#include "UserInterface.h"
 #include "Credentials.h"
 #include "TrainingSession.h"
 
@@ -21,29 +22,29 @@
 #define STATE_MANAGER_TASK_STACK_SIZE 4096 // 4KB stack for the FSM
 #define STATE_MANAGER_TASK_PRIORITY 1      // Low priority
 
+#define UI_TASK_STACK_SIZE 2048 
+#define UI_TASK_PRIORITY 1
+
 /****************************************************************
  * Global Variables
  ****************************************************************/
-/**
- * @brief Global pointer to the main StateManager (FSM).
- */
 StateManager* g_stateManager = nullptr;
-
-/**
- * @brief Global pointer to the main DataManager (NVS/FS).
- */
 DataManager* g_dataManager = nullptr;
-
 SupabaseClient* g_supabaseClient = nullptr;
+UserInterface* g_userInterface = nullptr;
 
 /****************************************************************
  * Task Function Prototypes
  ****************************************************************/
-
 /**
- * @brief The main FreeRTOS task that runs the StateManager.
+ * @brief The main FreeRTOS task that runs the StateManager (FSM).
  */
 void stateManagerTask(void* parameter);
+
+/**
+ * @brief The FreeRTOS task that runs the UserInterface (HW) updates.
+ */
+void userInterfaceTask(void* parameter);
 
 /****************************************************************
  * Setup Function
@@ -64,11 +65,6 @@ void setup() {
         while(1);
     }
     LOG_PRINTLN("DataManager initialized.");
-    
-    // 2.5 Create SupabaseClient
-    g_supabaseClient = new SupabaseClient(SUPABASE_URL, SUPABASE_API_KEY);
-    LOG_PRINTLN("SupabaseClient initialized.");
-
     // Verificar-Opcional: Guardar un ID por defecto si no existe
     if (g_dataManager->getDeviceID() == "DEFAULT-000") {
         LOG_PRINTLN("Device ID not set. Saving default ID: ESP32-001");
@@ -76,11 +72,22 @@ void setup() {
     }
     //g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
 
-    // 3. Create StateManager and inject DataManager dependency
-    g_stateManager = new StateManager(g_dataManager, g_supabaseClient); 
+    
+    // 3. Create SupabaseClient
+    g_supabaseClient = new SupabaseClient(SUPABASE_URL, SUPABASE_API_KEY);
+    LOG_PRINTLN("SupabaseClient initialized.");
+
+    // 4. Create and initialize UserInterface
+    g_userInterface = new UserInterface();
+
+    // 5. Create StateManager and inject DataManager dependency
+    g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_userInterface); 
     LOG_PRINTLN("StateManager initialized. Starting FSM...");
     
-    // 4. Create the StateManager's dedicated task
+    // 6. Initialize UserInterface with FSM event queue
+    g_userInterface->init(g_stateManager->getEventQueue());
+
+    // 7. Create the StateManager's dedicated task
     xTaskCreate(
         stateManagerTask,               // Task function
         "StateManagerTask",             // Task name (for debugging)
@@ -89,9 +96,18 @@ void setup() {
         STATE_MANAGER_TASK_PRIORITY,    // Task priority
         NULL                            // Task handle
     );
-
-    LOG_PRINTLN("Setup complete. FSM task is running.");
     
+    // 8. Create the UserInterface's dedicated task
+    xTaskCreate(
+        userInterfaceTask,              // Task function
+        "UserInterfaceTask",            // Task name (for debugging)
+        UI_TASK_STACK_SIZE,             // Stack size
+        NULL,                           // Task parameters
+        UI_TASK_PRIORITY,               // Task priority
+        NULL                            // Task handle
+    );
+
+    LOG_PRINTLN("Setup complete. FSM task is running.");    
     // --- Instrucciones para el simulador ---
     LOG_PRINTLN("\n--- Event Simulator Ready ---");
     LOG_PRINTLN("Send commands via Serial Monitor (No new line/CR):");
@@ -99,13 +115,17 @@ void setup() {
     LOG_PRINTLN(" 'f' -> EVENT_MODE_OFFLINE_ACTIVATED");
     LOG_PRINTLN(" 's' -> EVENT_SYNC_COMPLETED (Simulate)");
     LOG_PRINTLN(" 'e' -> EVENT_SYNC_FAILED (Simulate)");
-    LOG_PRINTLN(" 'p' -> EVENT_START_MANUAL_PLAY (Simulate 'Play')");
+    LOG_PRINTLN(" 'm' -> EVENT_START_MANUAL_PLAY");    
+
+    LOG_PRINTLN(" 'p' -> print numero de trainings pendientes");
+    LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
+    LOG_PRINTLN(" 'l' -> List local dog_list.json content");
+
 }
 
 /****************************************************************
  * Task Function Implementations
  ****************************************************************/
-
 void stateManagerTask(void* parameter) {
     while (true) {
         // This loop runs as fast as possible.
@@ -115,6 +135,17 @@ void stateManagerTask(void* parameter) {
         if (g_stateManager != nullptr) {
             g_stateManager->execute();
         }
+    }
+}
+
+void userInterfaceTask(void* parameter) {
+    while (true) {
+        if (g_userInterface != nullptr) {
+            // Esta función revisa millis() y cambia los pines
+            // No bloqueante.
+            g_userInterface->update();
+        }
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
@@ -202,3 +233,5 @@ void loop() {
 
     vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid busy loop
 }
+
+

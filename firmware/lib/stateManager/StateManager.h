@@ -16,13 +16,15 @@
 #include <Arduino.h>
 #include <freertos/queue.h> 
 #include "Events.h"         
-#include "SupabaseClient.h"
+
 
 /****************************************************************
  * Forward Declarations
  ****************************************************************/
 class State; 
 class DataManager; // Dependency
+class UserInterface; // Dependency
+class SupabaseClient; // Dependency
 
 /****************************************************************
  * Class Declarations
@@ -38,7 +40,7 @@ public:
      * @brief Constructor.
      * @param dataManager A pointer to the global DataManager instance.
      */
-    StateManager(DataManager* dataManager, SupabaseClient* supabaseClient);
+    StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, UserInterface* ui);
 
     /**
      * @brief Cleans up the queue and current state.
@@ -59,29 +61,17 @@ public:
      */
     void changeState(State* newState);
 
-    /**
-     * @brief Provides read-only access to the event queue handle.
-     * @return The handle to the FreeRTOS event queue.
-     */
     QueueHandle_t getEventQueue() const;
-
-    /**
-     * @brief Gets the pointer to the DataManager instance.
-     * @return A pointer to the DataManager.
-     */
     DataManager* getDataManager() const;
-
-    /**
-     * @brief Gets the pointer to the SupabaseClient instance.
-     * @return A pointer to the SupabaseClient.
-     */
     SupabaseClient* getSupabaseClient() const;
+    UserInterface* getUserInterface() const;
 
 private:
     State* currentState;
     QueueHandle_t eventQueue;
     DataManager* dataManager;
     SupabaseClient* supabaseClient;
+    UserInterface* userInterface;
 };
 
 #endif // STATEMANAGER_H
