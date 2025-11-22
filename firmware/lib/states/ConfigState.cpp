@@ -12,6 +12,7 @@
 #include "TrainingSession.h"
 #include "Events.h"
 #include "config.h"
+#include "UserInterface.h"
 
 // States we can transition to
 #include "SyncState.h"
@@ -41,6 +42,7 @@ ConfigState::ConfigState(DataManager* dataManager)
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
     this->sessionConfig = new TrainingSession();
+    manager->getUserInterface()->setLedPattern(LED_IDLE_OFFLINE);
 
     PIN_LOW(2); // Turn on debug LED to indicate ConfigState
     //TODO:

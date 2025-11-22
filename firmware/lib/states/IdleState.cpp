@@ -43,7 +43,8 @@ IdleState::IdleState(){
 void IdleState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering IdleState...");
     LOG_PRINTLN("Configuring wake-up sources...");
-
+    manager->getUserInterface()->setLedPattern(LED_OFF);
+    
     // 1. Configurar Interruptor para wake-up
     manager->getUserInterface()->disableSwitchInterrupt();
 

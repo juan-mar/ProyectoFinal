@@ -111,13 +111,22 @@ void UserInterface::enableSwitchInterrupt() {
 }
 
 void IRAM_ATTR UserInterface::isrModeSwitch() {
-    bool isOnline = digitalRead(PIN_MODE_SWITCH); // Asumiendo HIGH = ONLINE
-    Event ev;
-    ev.type = isOnline ? EVENT_MODE_ONLINE_ACTIVATED : EVENT_MODE_OFFLINE_ACTIVATED;
+   static unsigned long lastInterruptTime = 0;
+    unsigned long interruptTime = millis(); // O esp_timer_get_time() para microsegundos
 
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    if (fsmQueue != nullptr) {
-        xQueueSendFromISR(fsmQueue, &ev, &xHigherPriorityTaskWoken);
+    // Si pasaron menos de 50ms desde el último cambio, ignóralo (es ruido/rebote)
+    if (interruptTime - lastInterruptTime > 50) {
+        
+        bool isOnline = digitalRead(PIN_MODE_SWITCH);
+        Event ev;
+        ev.type = isOnline ? EVENT_MODE_ONLINE_ACTIVATED : EVENT_MODE_OFFLINE_ACTIVATED;
+
+        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+        if (fsmQueue != nullptr) {
+            xQueueSendFromISR(fsmQueue, &ev, &xHigherPriorityTaskWoken);
+        }
+        if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
     }
-    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
+    
+    lastInterruptTime = interruptTime;
 }
