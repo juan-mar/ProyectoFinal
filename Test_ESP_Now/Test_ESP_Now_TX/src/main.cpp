@@ -19,7 +19,7 @@
 #include <esp_sleep.h>
 
 // Dirección MAC del receptor
-uint8_t broadcastAddress[] = {0xA0, 0xB7, 0x65, 0x49, 0x2A, 0xB8};
+uint8_t broadcastAddress[] = {0x0C, 0xB8, 0x15, 0xF5, 0x21, 0xE4};
 
 typedef struct struct_message {
   char word[12];
