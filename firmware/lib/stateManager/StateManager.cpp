@@ -22,8 +22,8 @@
  * Class Method Implementations
  ****************************************************************/
 
-StateManager::StateManager(DataManager* dataManager) 
-                : currentState(nullptr), dataManager(dataManager)
+StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, UserInterface* ui) 
+                : currentState(nullptr), dataManager(dataManager), supabaseClient(supabaseClient), userInterface(ui)
 {
     eventQueue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(Event));
 
@@ -70,7 +70,6 @@ void StateManager::changeState(State* newState) {
         delete currentState;
     }
 
-
     currentState = newState;
 
     if (currentState != nullptr) {
@@ -86,4 +85,12 @@ QueueHandle_t StateManager::getEventQueue() const {
 
 DataManager* StateManager::getDataManager() const {
     return dataManager;
+}
+
+SupabaseClient* StateManager::getSupabaseClient() const {
+    return supabaseClient;
+}
+
+UserInterface* StateManager::getUserInterface() const {
+    return userInterface;
 }

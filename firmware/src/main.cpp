@@ -10,6 +10,11 @@
 #include "config.h"       // For LOG_... macros
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
+#include "SupabaseClient.h"
+#include "UserInterface.h"
+#include "Credentials.h"
+#include "TrainingSession.h"
+
 
 /****************************************************************
  * Defines and Constants
@@ -17,32 +22,36 @@
 #define STATE_MANAGER_TASK_STACK_SIZE 4096 // 4KB stack for the FSM
 #define STATE_MANAGER_TASK_PRIORITY 1      // Low priority
 
+#define UI_TASK_STACK_SIZE 2048 
+#define UI_TASK_PRIORITY 1
+
 /****************************************************************
  * Global Variables
  ****************************************************************/
-/**
- * @brief Global pointer to the main StateManager (FSM).
- */
 StateManager* g_stateManager = nullptr;
-
-/**
- * @brief Global pointer to the main DataManager (NVS/FS).
- */
 DataManager* g_dataManager = nullptr;
+SupabaseClient* g_supabaseClient = nullptr;
+UserInterface* g_userInterface = nullptr;
 
 /****************************************************************
  * Task Function Prototypes
  ****************************************************************/
-
 /**
- * @brief The main FreeRTOS task that runs the StateManager.
+ * @brief The main FreeRTOS task that runs the StateManager (FSM).
  */
 void stateManagerTask(void* parameter);
+
+/**
+ * @brief The FreeRTOS task that runs the UserInterface (HW) updates.
+ */
+void userInterfaceTask(void* parameter);
 
 /****************************************************************
  * Setup Function
  ****************************************************************/
 void setup() {
+    PIN_MODE(2, OUTPUT); // Example: Set pin 2 as output for debug LED
+    PIN_LOW(2);          // Turn on debug LED
     // 1. Initialize Serial Monitor (only in debug mode)
     LOG_SETUP(115200);
     vTaskDelay(1000 / portTICK_PERIOD_MS); 
@@ -56,18 +65,29 @@ void setup() {
         while(1);
     }
     LOG_PRINTLN("DataManager initialized.");
-    
     // Verificar-Opcional: Guardar un ID por defecto si no existe
     if (g_dataManager->getDeviceID() == "DEFAULT-000") {
         LOG_PRINTLN("Device ID not set. Saving default ID: ESP32-001");
         g_dataManager->saveDeviceID("ESP32-001");
     }
+    //g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
 
-    // 3. Create StateManager and inject DataManager dependency
-    g_stateManager = new StateManager(g_dataManager); 
+    
+    // 3. Create SupabaseClient
+    g_supabaseClient = new SupabaseClient(SUPABASE_URL, SUPABASE_API_KEY);
+    LOG_PRINTLN("SupabaseClient initialized.");
+
+    // 4. Create and initialize UserInterface
+    g_userInterface = new UserInterface();
+
+    // 5. Create StateManager and inject DataManager dependency
+    g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_userInterface); 
     LOG_PRINTLN("StateManager initialized. Starting FSM...");
     
-    // 4. Create the StateManager's dedicated task
+    // 6. Initialize UserInterface with FSM event queue
+    g_userInterface->init(g_stateManager->getEventQueue());
+
+    // 7. Create the StateManager's dedicated task
     xTaskCreate(
         stateManagerTask,               // Task function
         "StateManagerTask",             // Task name (for debugging)
@@ -76,9 +96,18 @@ void setup() {
         STATE_MANAGER_TASK_PRIORITY,    // Task priority
         NULL                            // Task handle
     );
-
-    LOG_PRINTLN("Setup complete. FSM task is running.");
     
+    // 8. Create the UserInterface's dedicated task
+    xTaskCreate(
+        userInterfaceTask,              // Task function
+        "UserInterfaceTask",            // Task name (for debugging)
+        UI_TASK_STACK_SIZE,             // Stack size
+        NULL,                           // Task parameters
+        UI_TASK_PRIORITY,               // Task priority
+        NULL                            // Task handle
+    );
+
+    LOG_PRINTLN("Setup complete. FSM task is running.");    
     // --- Instrucciones para el simulador ---
     LOG_PRINTLN("\n--- Event Simulator Ready ---");
     LOG_PRINTLN("Send commands via Serial Monitor (No new line/CR):");
@@ -86,13 +115,17 @@ void setup() {
     LOG_PRINTLN(" 'f' -> EVENT_MODE_OFFLINE_ACTIVATED");
     LOG_PRINTLN(" 's' -> EVENT_SYNC_COMPLETED (Simulate)");
     LOG_PRINTLN(" 'e' -> EVENT_SYNC_FAILED (Simulate)");
-    LOG_PRINTLN(" 'p' -> EVENT_START_MANUAL_PLAY (Simulate 'Play')");
+    LOG_PRINTLN(" 'm' -> EVENT_START_MANUAL_PLAY");    
+
+    LOG_PRINTLN(" 'p' -> print numero de trainings pendientes");
+    LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
+    LOG_PRINTLN(" 'l' -> List local dog_list.json content");
+
 }
 
 /****************************************************************
  * Task Function Implementations
  ****************************************************************/
-
 void stateManagerTask(void* parameter) {
     while (true) {
         // This loop runs as fast as possible.
@@ -102,6 +135,17 @@ void stateManagerTask(void* parameter) {
         if (g_stateManager != nullptr) {
             g_stateManager->execute();
         }
+    }
+}
+
+void userInterfaceTask(void* parameter) {
+    while (true) {
+        if (g_userInterface != nullptr) {
+            // Esta función revisa millis() y cambia los pines
+            // No bloqueante.
+            g_userInterface->update();
+        }
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
@@ -123,26 +167,54 @@ void loop() {
             bool sendEvent = true;
             event.type = EVENT_NULL;
 
+            // Variables auxiliares para las pruebas manuales
+            TrainingSession dummySession; 
+            String jsonStr;
+
             switch (command) {
+                // --- EVENTOS DE LA FSM ---
                 case 'o': // Online
                     event.type = EVENT_MODE_ONLINE_ACTIVATED;
                     break;
-                
                 case 'f': // Offline
                     event.type = EVENT_MODE_OFFLINE_ACTIVATED;
                     break;
-                
                 case 's': // Sync Success
                     event.type = EVENT_SYNC_COMPLETED;
                     break;
-                
                 case 'e': // Sync Error/Failed
                     event.type = EVENT_SYNC_FAILED;
                     break;
-                
-                case 'p': // Play
+                case 'm': // Manual Play
                     event.type = EVENT_START_MANUAL_PLAY;
                     break;
+                // --- PRUEBAS DE DATOS ---
+                case 'w': // Write Session (Simular fin de juego)
+                    LOG_PRINTLN("\n[Test] Simulating completed training...");
+                    // Llenamos datos falsos
+                    dummySession.setDogCode("SIMON-01"); // Asegúrate que este perro exista en tu DB o fallará el RPC
+                    dummySession.setStartedAt("2025-12-01T10:00:00Z"); 
+                    dummySession.setDuration(66);
+                    dummySession.setResult("success");
+                    dummySession.setConditions("{\"temp\":24}");
+                    dummySession.setType("{\"mode\":\"auto\"}");
+                    dummySession.setDeviceCode(g_dataManager->getDeviceID()); // Usa el ID real guardado
+
+                    if (dummySession.serialize(jsonStr)) {
+                        g_dataManager->saveSessionFile(jsonStr);
+                        LOG_PRINTLN("[Test] Session saved to LittleFS.");
+                    }
+                break;
+
+                case 'p': // Status (Ver pendientes)
+                    LOG_PRINTF("\n[Test] Pending Sessions: %d\n", g_dataManager->countPendingSessions());
+                break;
+
+                case 'l': // List Dogs (Ver archivo local)
+                    LOG_PRINTLN("\n[Test] Reading 'dog_list.json' from LittleFS:");
+                    LOG_PRINTLN(g_dataManager->readDogList());
+                    LOG_PRINTLN("--- End of List ---");
+                break;
 
                 default:
                     sendEvent = false;
@@ -158,5 +230,8 @@ void loop() {
             }
         }
     #endif
+
     vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid busy loop
 }
+
+

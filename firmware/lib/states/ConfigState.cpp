@@ -9,11 +9,14 @@
 #include "ConfigState.h"
 #include "StateManager.h"
 #include "DataManager.h"
+#include "TrainingSession.h"
 #include "Events.h"
 #include "config.h"
+#include "UserInterface.h"
 
 // States we can transition to
 #include "SyncState.h"
+
 // #include "ManualPlayState.h"
 // #include "AutoPlayState.h"
 
@@ -38,6 +41,10 @@ ConfigState::ConfigState(DataManager* dataManager)
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
+    this->sessionConfig = new TrainingSession();
+    manager->getUserInterface()->setLedPattern(LED_IDLE_OFFLINE);
+
+    PIN_LOW(2); // Turn on debug LED to indicate ConfigState
     //TODO:
     // String dogList = dataManager->readDogList();
     // webServer->start(dogList);
@@ -56,6 +63,11 @@ void ConfigState::execute(StateManager* manager) {
 
 void ConfigState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting ConfigState...");
+    if (this->sessionConfig != nullptr) {
+        delete this->sessionConfig;
+        this->sessionConfig = nullptr;
+        LOG_PRINTLN("ConfigState: Unused session config deleted.");
+    }
     // webServer->stop();
 }
 
@@ -67,17 +79,19 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
-            manager->changeState(new SyncState(dataManager)); // Pasa la dependencia
+            manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
 
         case EVENT_START_MANUAL_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
             // manager->changeState(new ManualPlayState(dataManager));
+            this->sessionConfig = nullptr;
             break;
 
         case EVENT_START_AUTO_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
             // manager->changeState(new AutoPlayState(dataManager));
+            this->sessionConfig = nullptr;
             break;
         
         default:

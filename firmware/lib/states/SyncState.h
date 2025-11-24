@@ -1,9 +1,11 @@
 /****************************************************************
- * @file SyncState.h
- * @brief Declares the SyncState class.
- * This state is active in ONLINE mode, handling data upload.
+ * @file    SyncState.h
+ * @brief   Declares the SyncState class (Online data sync).
  ****************************************************************/
 
+/****************************************************************
+ * Include Guards
+ ****************************************************************/
 #ifndef SYNC_STATE_H
 #define SYNC_STATE_H
 
@@ -11,26 +13,30 @@
  * Headers
  ****************************************************************/
 #include "State.h"
+#include <freertos/task.h> // Para TaskHandle_t
 
 /****************************************************************
  * Forward Declarations
  ****************************************************************/
 class DataManager;
+class SupabaseClient;
 
 /****************************************************************
- * Classes / Functions prototypes
+ * Class Declarations
  ****************************************************************/
+
 /**
  * @brief Active in ONLINE mode, handles WiFi connection
- * and data synchronization with Supabase.
+ * and data synchronization with Supabase via a background task.
  */
 class SyncState : public State {
 public:
     /**
      * @brief Constructor that receives dependencies.
      * @param dataManager Pointer to the global DataManager.
+     * @param supabaseClient Pointer to the global SupabaseClient.
      */
-    SyncState(DataManager* dataManager);
+    SyncState(DataManager* dataManager, SupabaseClient* supabaseClient);
 
     virtual void enter(StateManager* manager) override;
     virtual void execute(StateManager* manager) override;
@@ -41,13 +47,13 @@ protected:
     virtual void update(StateManager* manager) override;
 
 private:
-    DataManager* dataManager; // Pointer to the injected dependency
+    DataManager* dataManager;
+    SupabaseClient* supabaseClient;
     
     /**
-     * @brief Private helper to start the sync process.
-     * Called from enter() or on a WiFi connected event.
+     * @brief Handle to the background sync task.
      */
-    void beginSynchronization(StateManager* manager);
+    TaskHandle_t h_syncTask;
 };
 
 #endif // SYNC_STATE_H

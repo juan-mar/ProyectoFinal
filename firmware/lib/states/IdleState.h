@@ -17,7 +17,7 @@
 /****************************************************************
  * Forward Declarations
  ****************************************************************/
-class DataManager;
+
 
 /****************************************************************
  * Class Declarations
@@ -34,7 +34,7 @@ public:
      * @brief Constructor that receives dependencies.
      * @param dataManager Pointer to the global DataManager.
      */
-    IdleState(DataManager* dataManager);
+    IdleState();
 
     virtual void enter(StateManager* manager) override;
     virtual void execute(StateManager* manager) override;
@@ -43,9 +43,6 @@ public:
 protected:
     virtual void handleEvent(StateManager* manager, Event& event) override;
     virtual void update(StateManager* manager) override;
-
-private:
-    DataManager* dataManager; // Pointer to the injected dependency
 };
 
 #endif // IDLE_STATE_H
