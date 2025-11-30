@@ -102,6 +102,14 @@ bool Receptor::calibracion() {
 bool Receptor::detect_thres() {
   detecting = true;
   int rssi_curr = rssi_filtered;
+  if (new_msg) {
+    Serial.print("RSSI actual: ");
+    Serial.println(rssi_curr);
+    Serial.print("Threshold: ");
+    Serial.println(this->threshold);
+    Serial.print("Barrier: ");
+    Serial.println(barrier);
+  }
   if (rssi_curr > this->threshold) {
     in_thres = true;
     return true; // señal detectada
@@ -154,6 +162,7 @@ void promiscuous_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&paquete_datos, incomingData, sizeof(paquete_datos));
   new_msg = true;
+  filtro_kalman.filtrado(rssi_display);
   //  Serial.print("Bytes received: ");
   //  Serial.println(len);
   //  Serial.print("Mensaje recibido: ");
@@ -163,7 +172,6 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   {
     Serial.print("RSSI: ");
     Serial.println(rssi_display);
-    filtro_kalman.filtrado(rssi_display);
     Serial.print("RSSI filtrado: ");
     Serial.println(rssi_filtered);
   }

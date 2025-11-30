@@ -8,7 +8,7 @@ Receptor rx;
 
 bool calib = false;
 bool detected = false;
-
+bool flag = false;
 
 void setup() {
   // Initialize Serial Monitor
@@ -39,25 +39,28 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  if (Serial.available() > 0 || calib) { // si hay datos disponibles en el puerto serie
+  if (Serial.available() > 0 || calib || flag) { // si hay datos disponibles en el puerto serie
     char ok = Serial.read();           // leer un carácter
     if (ok == 'c' || calib) {          // si el carácter es 'c'
       calib = rx.calibracion();        // llamar a la función calibracion
     }
-    else if (ok == 'd' || detected) {               // si el carácter es 'd' o ya se detecto la señal
+    else if (ok == 'd' || flag) {               // si el carácter es 'd' o ya se detecto la señal
+      flag = true;
       static unsigned long calibStart = millis();
       unsigned long now = millis();
       detected = rx.detect_thres(); // llamar a la función detect_thres
       if (detected && now - calibStart < THRES_TIME) {
-        Serial.println("Dentro del umbral");
+        //Serial.println("Dentro del umbral");
       } 
       else if(detected && now - calibStart >= THRES_TIME) {
         Serial.println("Señal detectada!");
+        flag = false;
       }
       else {
         Serial.println("Fuera del umbral");
+        calibStart = millis();
       }
+    }
   }
-}
 }
 // put function definitions here:
