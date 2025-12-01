@@ -19,7 +19,7 @@
  ****************************************************************/
 class DataManager;
 class TrainingSession;
-// class WebServerManager; // Futuro módulo
+class WebServerManager; // Futuro módulo
 
 /****************************************************************
  * Class Declarations
@@ -30,11 +30,7 @@ class TrainingSession;
  */
 class ConfigState : public State {
 public:
-    /**
-     * @brief Constructor that receives dependencies.
-     * @param dataManager Pointer to the global DataManager.
-     */
-    ConfigState(DataManager* dataManager);
+    ConfigState(DataManager* dataManager, WebServerManager* webServer);
 
     virtual void enter(StateManager* manager) override;
     virtual void execute(StateManager* manager) override;
@@ -47,7 +43,7 @@ protected:
 private:
     DataManager* dataManager;       // Pointer to the injected dependency
     TrainingSession* sessionConfig; // Pointer to the injected dependency
-    // WebServerManager* webServer; // Futuro puntero
+    WebServerManager* webServer; // Futuro puntero
 };
 
 #endif // CONFIG_STATE_H

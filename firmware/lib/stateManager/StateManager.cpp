@@ -22,8 +22,9 @@
  * Class Method Implementations
  ****************************************************************/
 
-StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, UserInterface* ui) 
-                : currentState(nullptr), dataManager(dataManager), supabaseClient(supabaseClient), userInterface(ui)
+StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, UserInterface* ui, WebServerManager* _ws) 
+                : currentState(nullptr), dataManager(dataManager), supabaseClient(supabaseClient), userInterface(ui),
+                ws(_ws)
 {
     eventQueue = xQueueCreate(EVENT_QUEUE_LENGTH, sizeof(Event));
 
@@ -33,7 +34,7 @@ StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseCli
     }
 
     // Set the initial state, injecting dependencies
-    currentState = new ConfigState(this->dataManager);
+    currentState = new ConfigState(this->dataManager, this->ws);
     
     if (currentState != nullptr) {
         currentState->enter(this);
@@ -93,4 +94,8 @@ SupabaseClient* StateManager::getSupabaseClient() const {
 
 UserInterface* StateManager::getUserInterface() const {
     return userInterface;
+}
+
+WebServerManager* StateManager::getWebServerManager() const {
+    return ws;
 }

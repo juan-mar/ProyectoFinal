@@ -13,6 +13,7 @@
 #include "Events.h"
 #include "config.h"
 #include "UserInterface.h"
+#include "WebServerManager.h"
 
 // States we can transition to
 #include "SyncState.h"
@@ -33,21 +34,17 @@
  * Class Method Implementations
  ****************************************************************/
 
-ConfigState::ConfigState(DataManager* dataManager) 
-    : dataManager(dataManager) // Constructor stores the pointer
-{
-    // this->webServer = new WebServerManager(); // se podria crear server aca
-}
+ConfigState::ConfigState(DataManager* dataManager, WebServerManager* webServer) 
+    : dataManager(dataManager), webServer(webServer) // Constructor stores the pointer
+{}
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
     this->sessionConfig = new TrainingSession();
     manager->getUserInterface()->setLedPattern(LED_IDLE_OFFLINE);
 
-    PIN_LOW(2); // Turn on debug LED to indicate ConfigState
-    //TODO:
-    // String dogList = dataManager->readDogList();
-    // webServer->start(dogList);
+    webServer->setTargetSession(this->sessionConfig);
+    webServer->begin();
 }
 
 void ConfigState::execute(StateManager* manager) {
@@ -68,7 +65,9 @@ void ConfigState::exit(StateManager* manager) {
         this->sessionConfig = nullptr;
         LOG_PRINTLN("ConfigState: Unused session config deleted.");
     }
-    // webServer->stop();
+ 
+    webServer->setTargetSession(nullptr);
+    webServer->stop();
 }
 
 /****************************************************************
@@ -100,6 +99,5 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
 }
 
 void ConfigState::update(StateManager* manager) {
-    // Lógica periódica (ej. cada 20ms)
-    // webServer->handleClient();
+    webServer->update();
 }

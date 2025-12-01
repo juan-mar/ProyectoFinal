@@ -280,7 +280,7 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_OFFLINE_ACTIVATED:
             LOG_PRINTLN("[SyncState] Event: Mode OFFLINE. Changing to ConfigState.");
-            manager->changeState(new ConfigState(dataManager));
+            manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             break;
 
         case EVENT_SYNC_COMPLETED:

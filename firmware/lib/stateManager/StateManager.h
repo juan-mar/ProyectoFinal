@@ -25,6 +25,7 @@ class State;
 class DataManager; // Dependency
 class UserInterface; // Dependency
 class SupabaseClient; // Dependency
+class WebServerManager; // Dependency
 
 /****************************************************************
  * Class Declarations
@@ -40,7 +41,8 @@ public:
      * @brief Constructor.
      * @param dataManager A pointer to the global DataManager instance.
      */
-    StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, UserInterface* ui);
+    StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, 
+                UserInterface* ui, WebServerManager* ws);
 
     /**
      * @brief Cleans up the queue and current state.
@@ -65,6 +67,7 @@ public:
     DataManager* getDataManager() const;
     SupabaseClient* getSupabaseClient() const;
     UserInterface* getUserInterface() const;
+    WebServerManager* getWebServerManager() const;
 
 private:
     State* currentState;
@@ -72,6 +75,7 @@ private:
     DataManager* dataManager;
     SupabaseClient* supabaseClient;
     UserInterface* userInterface;
+    WebServerManager* ws;
 };
 
 #endif // STATEMANAGER_H

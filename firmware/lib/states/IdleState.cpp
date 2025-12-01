@@ -116,7 +116,7 @@ void IdleState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_OFFLINE_ACTIVATED:
             LOG_PRINTLN("[IdleState] Event: Mode OFFLINE. Changing to ConfigState.");
-            manager->changeState(new ConfigState(manager->getDataManager()));
+            manager->changeState(new ConfigState(manager->getDataManager(), manager->getWebServerManager()));
             break;
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[IdleState] Event: Mode ONLINE. Changing to SyncState.");
