@@ -14,7 +14,7 @@
 #include "UserInterface.h"
 #include "Credentials.h"
 #include "TrainingSession.h"
-
+#include "WebServerManager.h"
 
 /****************************************************************
  * Defines and Constants
@@ -32,6 +32,7 @@ StateManager* g_stateManager = nullptr;
 DataManager* g_dataManager = nullptr;
 SupabaseClient* g_supabaseClient = nullptr;
 UserInterface* g_userInterface = nullptr;
+WebServerManager* g_webServerManager = nullptr;
 
 /****************************************************************
  * Task Function Prototypes
@@ -79,15 +80,25 @@ void setup() {
 
     // 4. Create and initialize UserInterface
     g_userInterface = new UserInterface();
+    LOG_PRINTLN("UserInterface initialized.");
 
-    // 5. Create StateManager and inject DataManager dependency
-    g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_userInterface); 
+    // 5. Create WebServerManager
+    g_webServerManager = new WebServerManager();
+    LOG_PRINTLN("WebServerManager initialized.");
+
+    //6. Create StateManager and inject DataManager dependency
+    g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_userInterface, g_webServerManager);
     LOG_PRINTLN("StateManager initialized. Starting FSM...");
+
+    g_webServerManager->setDataManager(g_dataManager);
+    g_webServerManager->setStateManager(g_stateManager);
     
-    // 6. Initialize UserInterface with FSM event queue
+    g_stateManager->begin();
+    
+    // 7. Initialize UserInterface with FSM event queue
     g_userInterface->init(g_stateManager->getEventQueue());
 
-    // 7. Create the StateManager's dedicated task
+    // 8. Create the StateManager's dedicated task
     xTaskCreate(
         stateManagerTask,               // Task function
         "StateManagerTask",             // Task name (for debugging)
@@ -97,7 +108,7 @@ void setup() {
         NULL                            // Task handle
     );
     
-    // 8. Create the UserInterface's dedicated task
+    // 9. Create the UserInterface's dedicated task
     xTaskCreate(
         userInterfaceTask,              // Task function
         "UserInterfaceTask",            // Task name (for debugging)

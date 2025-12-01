@@ -32,7 +32,11 @@ StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseCli
         LOG_PRINTLN("FATAL ERROR: Could not create event queue!");
         while(1); // Halt execution
     }
+}
 
+void StateManager::begin() {
+    // Currently, all initialization is done in the constructor
+    LOG_PRINTLN("StateManager: FSM begun.");
     // Set the initial state, injecting dependencies
     currentState = new ConfigState(this->dataManager, this->ws);
     
@@ -42,7 +46,7 @@ StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseCli
         LOG_PRINTLN("FATAL ERROR: Could not create initial state!");
         while(1); // Halt execution
     }
-}
+}   
 
 StateManager::~StateManager() {
     if (eventQueue != NULL) {

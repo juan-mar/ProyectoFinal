@@ -32,6 +32,9 @@ void UserInterface::init(QueueHandle_t queue) {
     setRgbColor(0, 0, 0);
 
     analogReadResolution(12);
+
+    pinMode(PIN_PWR_REMOTE_RX, OUTPUT);
+    digitalWrite(PIN_PWR_REMOTE_RX, LOW); // Apagado por defecto
 }
 
 void UserInterface::update() {
@@ -129,4 +132,9 @@ void IRAM_ATTR UserInterface::isrModeSwitch() {
     }
     
     lastInterruptTime = interruptTime;
+}
+
+void UserInterface::setRemoteRxPower(bool enable) {
+    digitalWrite(PIN_PWR_REMOTE_RX, enable ? HIGH : LOW);
+    LOG_PRINTF("UI: Remote RX Power %s\n", enable ? "ON" : "OFF");
 }

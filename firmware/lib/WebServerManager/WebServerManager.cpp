@@ -12,7 +12,8 @@
 
 // --- Constructor ---
 WebServerManager::WebServerManager() 
-    : dataManager(nullptr), stateManager(nullptr), server(80){
+    : dataManager(nullptr), stateManager(nullptr), server(80)
+{
     // Nothing else to init here
 }
 

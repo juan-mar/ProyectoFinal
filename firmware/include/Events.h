@@ -28,7 +28,9 @@ enum EventType {
 
     // --- Events from Play States ---
     EVENT_PLAY_FINISHED,            // User pressed "Finish" button (manual or auto)
-    
+    EVENT_TRAINING_SUCCESS,         // Trigger reward (e.g., dispense treat) success
+    EVENT_TRAINING_FAILED,          // Trigger reward failed
+
     // --- Hardware Interrupt Events ---
     EVENT_MODE_ONLINE_ACTIVATED,    // Hardware switch moved to ONLINE
     EVENT_MODE_OFFLINE_ACTIVATED,   // Hardware switch moved to OFFLINE

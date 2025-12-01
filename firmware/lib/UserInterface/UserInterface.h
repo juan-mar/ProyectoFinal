@@ -16,6 +16,7 @@
 #define PIN_LED_GREEN    4
 #define PIN_LED_BLUE     16
 #define PIN_BATTERY_ADC  34
+#define PIN_PWR_REMOTE_RX 14
 
 // --- Visual Feedback States ---
 enum LedPattern {
@@ -51,6 +52,7 @@ public:
     void enableSwitchInterrupt();
 
     int getBatteryPercentage();
+    void setRemoteRxPower(bool enable);
 
 private:
     static QueueHandle_t fsmQueue; // Static for ISR access

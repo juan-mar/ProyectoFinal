@@ -48,6 +48,11 @@ public:
      * @brief Cleans up the queue and current state.
      */
     ~StateManager();
+    
+    /**
+     * @brief Initializes the StateManager and set the first state stateConfig.
+     */
+    void begin();
 
     /**
      * @brief Main execution loop for the state machine.
