@@ -27,7 +27,7 @@ void IRAM_ATTR ReceptorRF::isrProxy() {
 void IRAM_ATTR ReceptorRF::handleISR() {
     unsigned long now = micros();
     _sampleTime = now - _ultimoPulsoMs;
-    if (_sampleTime > 500 && _sampleTime < 1300) {
+    if (_sampleTime > 500 && _sampleTime < 1000) {
         _pulsoDetectado = true;
     }
     _ultimoPulsoMs = now;
