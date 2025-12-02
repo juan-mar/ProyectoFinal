@@ -1,46 +1,29 @@
 #include <Arduino.h>
 
-// Asegúrate que estos sean tus pines correctos
+// Pines para el HM-10 (Serial2 en ESP32)
 #define RXD2 16
 #define TXD2 17
 
 void setup() {
+  // Comunicación con la PC
   Serial.begin(115200);
-  // Prueba 9600. Si salen garabatos, cambia a 115200
-  // Algunos HM-10 clones vienen a 9600, otros a 115200.
-  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2); 
   
-  Serial.println("--- MODO PUENTE (BUFFERED) ---");
-  Serial.println("Escribe el comando completo (ej: AT) y dale Enter.");
+  // Comunicación con el HM-10 (Por defecto suelen venir a 9600 baudios)
+  // Si no te responde, prueba cambiar este 9600 por 115200
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  
+  Serial.println("--- MODO PUENTE ACTIVADO ---");
+  Serial.println("Escribe 'AT' y presiona Enter para probar.");
 }
 
 void loop() {
-  // 1. ESCUCHAR AL PC (Tu teclado)
-  if (Serial.available()) {
-    // Leemos toda la frase hasta que detectamos el "Enter" (\n)
-    String comando = Serial.readStringUntil('\n');
-    
-    // Limpiamos espacios en blanco extra al final (trim)
-    comando.trim(); 
-    
-    // Si escribiste algo válido, lo mandamos al módulo
-    if (comando.length() > 0) {
-      Serial.print("Enviando al modulo: ");
-      Serial.println(comando);
-      
-      Serial2.print(comando); // Manda el comando limpio
-      
-      // OJO AQUÍ: La mayoría de los HM-10 NO quieren retorno de carro.
-      // Pero si no te responde nada, descomenta las siguientes líneas una por una:
-      // Serial2.write('\r'); 
-      // Serial2.write('\n'); 
-    }
-  }
-
-  // 2. ESCUCHAR AL MÓDULO (Su respuesta)
+  // Si el HM-10 dice algo, imprímelo en la PC
   if (Serial2.available()) {
-    // Leemos lo que responde el módulo y lo mostramos
-    char c = Serial2.read();
-    Serial.write(c);
+    Serial.write(Serial2.read());
+  }
+  
+  // Si tú escribes algo en la PC, mándalo al HM-10
+  if (Serial.available()) {
+    Serial2.write(Serial.read());
   }
 }
