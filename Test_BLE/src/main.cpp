@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+/*
 // Pines para el HM-10 (Serial2 en ESP32)
 #define RXD2 16
 #define TXD2 17
@@ -26,4 +27,44 @@ void loop() {
   if (Serial.available()) {
     Serial2.write(Serial.read());
   }
+}
+
+*/
+  
+#include "rx.h"
+
+
+String MI_MAC = "9C:1D:58:95:7B:9C";
+Receptor scanner(MI_MAC);
+
+// Variables para TU lógica de promedio
+const int UMBRAL = -60;
+int promedio = -100;
+
+void setup() {
+  Serial.begin(115200);
+  scanner.init();
+  Serial.println("Scanner Continuo Iniciado.");
+}
+
+void loop() {
+  // 1. MANTENIMIENTO (Obligatorio llamarlo para que el ciclo infinito funcione)
+  scanner.loop();
+
+  // 2. USO DE DATOS
+  // Leemos la variable global directamente
+  int lecturaRaw = scanner.rssiActual;
+  
+  // Opcional: Seguridad por si se apaga el dispositivo
+  if (millis() - scanner.ultimaActualizacion > 3500) {
+      lecturaRaw = -100; // Si no hay datos en 3.5s, asumimos lejos
+      Serial.println("--- Perdió señal ---");
+  }
+
+  // Aquí haces tu promedio o lógica
+  Serial.print("RSSI en tiempo real: ");
+  Serial.println(lecturaRaw);
+
+  // Pequeño delay para no saturar el monitor serie (no afecta al bluetooth)
+  //delay(100); 
 }
