@@ -1,69 +1,66 @@
 #include <Arduino.h>
-
-/*
-// Pines para el HM-10 (Serial2 en ESP32)
-#define RXD2 16
-#define TXD2 17
-
-void setup() {
-  // Comunicación con la PC
-  Serial.begin(115200);
-  
-  // Comunicación con el HM-10 (Por defecto suelen venir a 9600 baudios)
-  // Si no te responde, prueba cambiar este 9600 por 115200
-  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
-  
-  Serial.println("--- MODO PUENTE ACTIVADO ---");
-  Serial.println("Escribe 'AT' y presiona Enter para probar.");
-}
-
-void loop() {
-  // Si el HM-10 dice algo, imprímelo en la PC
-  if (Serial2.available()) {
-    Serial.write(Serial2.read());
-  }
-  
-  // Si tú escribes algo en la PC, mándalo al HM-10
-  if (Serial.available()) {
-    Serial2.write(Serial.read());
-  }
-}
-
-*/
-  
 #include "rx.h"
 
 
-String MI_MAC = "9C:1D:58:95:7B:9C";
-Receptor scanner(MI_MAC);
+/********************* DEFINICIONES *********************/
+#define THRES_TIME 3000
+#define MAC_ADDR "9C:1D:58:95:7B:9C"
 
-// Variables para TU lógica de promedio
-const int UMBRAL = -60;
+
+/****************** VARIABLES GLOBALES ******************/
+const int umbral = -60;
 int promedio = -100;
+
+bool calib = false;
+bool detected = false;
+bool flag = false;
+
+
+/******************* CÓDIGO PRINCIPAL ********************/
+Receptor scanner(MAC_ADDR);
 
 void setup() {
   Serial.begin(115200);
-  scanner.init();
+  scanner.init(); //Inicia los callbacks
   Serial.println("Scanner Continuo Iniciado.");
 }
 
 void loop() {
-  // 1. MANTENIMIENTO (Obligatorio llamarlo para que el ciclo infinito funcione)
+  // Ciclo infinito que hace la limpieza de datos
   scanner.loop();
 
-  // 2. USO DE DATOS
   // Leemos la variable global directamente
-  int lecturaRaw = scanner.rssiActual;
+  int lecturaRaw = scanner.getRSSI();
   
-  // Opcional: Seguridad por si se apaga el dispositivo
-  if (millis() - scanner.ultimaActualizacion > 3500) {
+  // Seguridad por si se apaga el dispositivo
+  if (millis() - scanner.getUltimaActualizacion() > 3500) {
       lecturaRaw = -100; // Si no hay datos en 3.5s, asumimos lejos
       Serial.println("--- Perdió señal ---");
   }
 
-  // Aquí haces tu promedio o lógica
-  Serial.print("RSSI en tiempo real: ");
-  Serial.println(lecturaRaw);
+  if (scanner.isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
+    char ok = Serial.read();           // leer un carácter
+    if (ok == 'c' || calib) {          // si el carácter es 'c'
+      calib = scanner.calibracion();        // llamar a la función calibracion
+    }
+    else if (ok == 'd' || flag) {               // si el carácter es 'd' o ya se detecto la señal
+      flag = true;
+      static unsigned long calibStart = millis();
+      unsigned long now = millis();
+      detected = scanner.detect_thres(); // llamar a la función detect_thres
+      if (detected && now - calibStart < THRES_TIME) {
+        Serial.println("Dentro del umbral");
+      } 
+      else if(detected && now - calibStart >= THRES_TIME) {
+        Serial.println("Señal detectada!");
+        flag = false;
+      }
+      else {
+        Serial.println("Fuera del umbral");
+        calibStart = millis();
+      }
+    }
+  }
 
   // Pequeño delay para no saturar el monitor serie (no afecta al bluetooth)
   //delay(100); 
