@@ -162,31 +162,46 @@ bool Receptor::calibracion() {
     sampleCount++;
     sumRSSI += rssi_calib;
     samples[sampleCount - 1] = rssi_calib;
+
     
     return true;
   }
-  else if (sampleCount >= CAL_SAMPLES) {
+else if (sampleCount >= CAL_SAMPLES) {
     Serial.println("Fin calibracion");
-    
+    Serial.print("Sample Count: ");
+    Serial.println(sampleCount);
     calibrating = false;
 
     if (sampleCount > 0) {
-      this -> threshold = (float)sumRSSI / sampleCount;
+      // Calculamos el promedio (Threshold)
+      this->threshold = (float)sumRSSI / sampleCount;
+
+      // Reiniciar la variable acumuladora antes de usarla
+      float suma_diferencias = 0; 
+
+      // Sumamos los cuadrados de las diferencias
       for(int i = 0; i < sampleCount; i++) {
-        sum_var += ((samples[i] - this->threshold) * (samples[i] - this->threshold))/CAL_SAMPLES;
+        float diferencia = samples[i] - this->threshold;
+        suma_diferencias += (diferencia * diferencia);
       }
-      this -> varianza  = sum_var;
-      filtro_kalman.set_varianzaR(this -> varianza);
-      Serial.print("Threshold:");
-      Serial.println(this -> threshold);
-      Serial.print("Varianza:");
-      Serial.println(this -> varianza);
 
-      barrier = threshold - sqrt(varianza); //CHECKEAR VALOR DE LA BARRERA
+      // Calculamos la Varianza Muestral (División única al final)
+      // Usamos (sampleCount - 1) para mayor precisión estadística.
+      if (sampleCount > 1) {
+          this->varianza = suma_diferencias / (sampleCount - 1);
+      } else {
+          this->varianza = 0; // Evitar división por cero si solo hay 1 muestra
+      }
 
-      //notifyCalibrationDone(); // acá le decís al TAG que prenda el LED
+      filtro_kalman.set_varianzaR(this->varianza);
+      
+      Serial.print("Threshold: "); Serial.println(this->threshold);
+      Serial.print("Varianza: "); Serial.println(this->varianza);
+
+      // sqrt(varianza) es la Desviación Estándar (Sigma).
+      barrier = threshold - 2 * sqrt(this->varianza); 
     }
-    return false; // calibración terminada
+    return false; 
   }
   else {
     return true; // calibración en progreso
