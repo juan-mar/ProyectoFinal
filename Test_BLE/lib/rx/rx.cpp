@@ -146,15 +146,12 @@ void Receptor::_procesarDato(int rssi) {
 
 bool Receptor::calibracion() {
   calibrating = true;
-  static unsigned long calibStart = millis();
-  unsigned long now = millis();
 
   // Es momento de tomar una nueva muestra?
   if (new_msg && (sampleCount < CAL_SAMPLES))
   {
     new_msg = false;
-    lastSampleTime = now;
-
+    
     int rssi_calib = this->rssiActual;
     Serial.print("Muestra RSSI: ");
     Serial.println(rssi_calib);
@@ -194,13 +191,19 @@ else if (sampleCount >= CAL_SAMPLES) {
       }
 
       filtro_kalman.set_varianzaR(this->varianza);
-      
-      Serial.print("Threshold: "); Serial.println(this->threshold);
-      Serial.print("Varianza: "); Serial.println(this->varianza);
 
       // sqrt(varianza) es la Desviación Estándar (Sigma).
-      barrier = threshold - 2 * sqrt(this->varianza); 
+      barrier = threshold - 1 * sqrt(this->varianza); 
+
+      Serial.print("Threshold: "); Serial.println(this->threshold);
+      Serial.print("Varianza: "); Serial.println(this->varianza);
+      Serial.print("Barrier:"); Serial.println(barrier);
+
+      suma_diferencias = 0;
     }
+
+    sumRSSI = 0;
+    sampleCount = 0;
     return false; 
   }
   else {
@@ -211,14 +214,6 @@ else if (sampleCount >= CAL_SAMPLES) {
 bool Receptor::detect_thres() {
   detecting = true;
   int rssi_curr = rssi_filtered;
-  if (new_msg) {
-    Serial.print("RSSI actual: ");
-    Serial.println(rssi_curr);
-    Serial.print("Threshold: ");
-    Serial.println(this->threshold);
-    Serial.print("Barrier: ");
-    Serial.println(barrier);
-  }
   if (rssi_curr > this->threshold) { // señal dentro del umbral
     in_thres = true;
     return true; 

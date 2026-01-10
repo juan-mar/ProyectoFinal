@@ -15,6 +15,8 @@ bool calib = false;
 bool detected = false;
 bool flag = false;
 
+unsigned long calibStart;
+
 
 /******************* CÓDIGO PRINCIPAL ********************/
 Receptor scanner(MAC_ADDR);
@@ -44,8 +46,10 @@ void loop() {
       calib = scanner.calibracion();        // llamar a la función calibracion
     }
     else if (ok == 'd' || flag) {               // si el carácter es 'd' o ya se detecto la señal
+      if(!flag) {
+      calibStart = millis();
+      }
       flag = true;
-      static unsigned long calibStart = millis();
       unsigned long now = millis();
       detected = scanner.detect_thres(); // llamar a la función detect_thres
       if (detected && now - calibStart < THRES_TIME) {
