@@ -83,13 +83,13 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_START_MANUAL_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
-            // manager->changeState(new ManualPlayState(dataManager));
+            // manager->changeState(new ManualPlayState(dataManager,trainingSession));
             this->sessionConfig = nullptr;
             break;
 
         case EVENT_START_AUTO_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
-            // manager->changeState(new AutoPlayState(dataManager));
+            // manager->changeState(new AutoPlayState(dataManager,trainingSession));
             this->sessionConfig = nullptr;
             break;
         

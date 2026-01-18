@@ -31,6 +31,8 @@ enum EventType {
     EVENT_TRAINING_SUCCESS,         // Trigger reward (e.g., dispense treat) success
     EVENT_TRAINING_FAILED,          // Trigger reward failed
 
+    // ---Events from NRF24
+
     // --- Hardware Interrupt Events ---
     EVENT_MODE_ONLINE_ACTIVATED,    // Hardware switch moved to ONLINE
     EVENT_MODE_OFFLINE_ACTIVATED,   // Hardware switch moved to OFFLINE
