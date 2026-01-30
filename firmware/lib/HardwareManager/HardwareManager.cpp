@@ -136,14 +136,14 @@ void HardwareManager::processCommand(HwMessage msg) {
 
         case CMD_ENABLE_BLE:
             if (!_bleEnabled) {
-                //_bleScanner.startScanning(); // Resume Task interna
+                //_bleScanner.init(); // Resume Task interna
                 _bleEnabled = true;
             }
             break;
 
         case CMD_DISABLE_BLE:
             if (_bleEnabled) {
-                //_bleScanner.stopScanning(); // Suspend Task interna
+                //_bleScanner.stop(); // Suspend Task interna
                 _bleEnabled = false;
             }
             break;
@@ -177,6 +177,9 @@ void HardwareManager::checkDrivers() {
        */     
     }
     // Nota: El BLE no se chequea aquí porque corre en su propia Task y manda eventos directo
+    if(_bleEnabled){
+
+    }
 }
 
 void HardwareManager::readSensors() {
