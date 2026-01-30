@@ -12,7 +12,7 @@
 #include "Events.h"
 #include "config.h"
 #include "esp_sleep.h" // Required for light sleep functions
-#include "UserInterface.h"
+#include "HardwareManager.h"
 #include "SupabaseClient.h"
 
 // States we can transition to
@@ -41,51 +41,23 @@ IdleState::IdleState(){
 }
 
 void IdleState::enter(StateManager* manager) {
-    LOG_PRINTLN("Entering IdleState...");
-    LOG_PRINTLN("Configuring wake-up sources...");
-    manager->getUserInterface()->setLedPattern(LED_OFF);
-    
-    // 1. Configurar Interruptor para wake-up
-    manager->getUserInterface()->disableSwitchInterrupt();
+    LOG_PRINTLN("FSM: Entering IdleState...");
 
-    int currentSwitchState = digitalRead(WAKE_UP_PIN);
-    gpio_int_type_t wakeupLevel;
-    if (currentSwitchState == HIGH) {
-        wakeupLevel = GPIO_INTR_LOW_LEVEL;
-        LOG_PRINTLN("Switch is HIGH. Sleeping until it goes LOW.");
-    } else {
-        wakeupLevel = GPIO_INTR_HIGH_LEVEL;
-        LOG_PRINTLN("Switch is LOW. Sleeping until it goes HIGH.");
-    }
-    gpio_wakeup_enable((gpio_num_t)WAKE_UP_PIN, wakeupLevel);
-    esp_sleep_enable_gpio_wakeup();
-    
-    PIN_HIGH(2); // Turn off debug LED to indicate sleep
+    // Apagar LEDs visualmente antes de dormir (Opcional, o mandar comando CMD_LEDS_OFF)
+    // manager->getHardware()->sendCommand(CMD_SET_LED_PATTERN, LED_OFF);
 
-    // 2. Entrar en modo de sueño ligero
-    LOG_PRINTLN("Going to light sleep. Zzz...");
-    LOG_FLUSH();
-    esp_light_sleep_start();
+    // 1. Delegar el sueño al HardwareManager
+    // Esta línea detiene la FSM hasta que alguien mueva el interruptor
+    Event wakeupEvent = manager->getHardwareManager()->enterLightSleep();
 
-    LOG_PRINTLN("Woke up from light sleep!");
-    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-    bool isNowOnline = digitalRead(WAKE_UP_PIN);
-    Event ev;
+    // 2. Al volver, ya tenemos el evento cocinado. Lo enviamos a la cola.
+    // (Opcional: Podrías procesarlo directo, pero enviarlo a la cola mantiene el flujo 'execute')
+    LOG_PRINTF("FSM: Woke up with event type: %d\n", wakeupEvent.type);
     
-    if (cause == ESP_SLEEP_WAKEUP_GPIO) {
-        LOG_PRINTLN("Wakeup caused by GPIO (Mode Switch).");
-        ev.type = isNowOnline ? EVENT_MODE_ONLINE_ACTIVATED : EVENT_MODE_OFFLINE_ACTIVATED;
-    } else if (cause == ESP_SLEEP_WAKEUP_UART) {
-        LOG_PRINTLN("Wakeup cause UART.");
-        ev.type = isNowOnline ? EVENT_MODE_ONLINE_ACTIVATED : EVENT_MODE_OFFLINE_ACTIVATED;
-    } else  {
-        LOG_PRINT("Woke up for unknown reason: ");
-        LOG_PRINTLN(cause);
-        ev.type = isNowOnline ? EVENT_MODE_ONLINE_ACTIVATED : EVENT_MODE_OFFLINE_ACTIVATED;
-    }
+    xQueueSend(manager->getEventQueue(), &wakeupEvent, 0);
     
-    // 3. Enviar el evento a nuestra propia cola para ser procesado por execute()
-    xQueueSend(manager->getEventQueue(), &ev, 0);
+    // La FSM saldrá de IdleState en la próxima vuelta del loop execute()
+    // cuando lea este evento de la cola.
 }
 
 void IdleState::execute(StateManager* manager) {
@@ -103,9 +75,7 @@ void IdleState::execute(StateManager* manager) {
 void IdleState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting IdleState...");
     
-    // Limpiar las fuentes de despertar de hardware
-    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-    manager->getUserInterface()->enableSwitchInterrupt();
+    manager->getHardwareManager()->prepareForWakeUp();
 }
 
 /****************************************************************

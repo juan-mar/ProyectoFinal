@@ -1,83 +1,103 @@
 #include <Arduino.h>
 
 // --- DEFINICIÓN DE PINES ---
-// Asegúrate de cambiar este número al GPIO donde conectaste el Gate del 2N7002
-uint8_t LOAD_SW_PIN = 4;   // Pin para Habilitar/Deshabilitar la alimentación (Switch Load)
 
-uint8_t TRIG_PIN = 5;      // Pin de disparo del solenoide (Gate del MOSFET Low-Side)
-uint8_t PULSE_PIN = 14;    // (Opcional o auxiliar según tu esquema anterior)
+// 1. Etapa de 12V (Switch Load 1)
+const uint8_t PIN_ENABLE_12V = 4;   // Pin que activa la batería hacia la Boost de 12V
+
+// 2. Etapa de 80V (Switch Load 2 - NUEVO)
+// IMPORTANTE: Conecta este pin al Gate del 2N7002 que controla la entrada de 80V
+const uint8_t PIN_ENABLE_80V = 16;  // <--- CAMBIA ESTE NUMERO SI USAS OTRO PIN
+
+// 3. Disparo (Solenoides)
+const uint8_t TRIG_PIN = 5;       // Pin de disparo del solenoide
+const uint8_t PULSE_PIN = 14;     // Auxiliar (LED o señal)
+
+// --- CONFIGURACIÓN ---
 unsigned long PULSE_DURATION_MS = 120; // Duración del pulso en ms
+const int TIEMPO_ESPERA_ARRANQUE = 100; // Tiempo de espera entre 12V y 80V (2 segundos)
 
 // --- FUNCIONES ---
 
 void sendPulse() {
-  // Solo avisamos, pero el disparo físico depende de si el Load Switch está prendido
-  Serial.print(F("Disparando... ")); 
+  Serial.print(F("Disparando Solenoide... ")); 
   digitalWrite(PULSE_PIN, HIGH);
   digitalWrite(TRIG_PIN, HIGH);
-  delay(PULSE_DURATION_MS);
+  
+  delay(PULSE_DURATION_MS); // Tiempo que el solenoide está activo
+  
   digitalWrite(PULSE_PIN, LOW);
   digitalWrite(TRIG_PIN, LOW);
   Serial.println(F("Fin del pulso."));
 }
 
-// Para mosfet invertido (si usaras lógica negativa en el disparo)
-void sendPulseInv() {
-  digitalWrite(PULSE_PIN, LOW);
-  digitalWrite(TRIG_PIN, LOW);
-  delay(PULSE_DURATION_MS);
-  digitalWrite(PULSE_PIN, HIGH);
-  digitalWrite(TRIG_PIN, HIGH);
+void encenderSistemaSecuencial() {
+  Serial.println(F(">> INICIANDO SECUENCIA DE ENCENDIDO..."));
+  
+  // 1. Encender Etapa 1 (12V)
+  digitalWrite(PIN_ENABLE_12V, HIGH);
+  Serial.println(F("   1. Boost 12V: ENCENDIDA."));
+  Serial.println(F("   ... Esperando estabilizacion (2 seg) ..."));
+
+  // 2. Espera de seguridad (para que carguen los capacitores de 12V)
+  delay(TIEMPO_ESPERA_ARRANQUE);
+
+  // 3. Encender Etapa 2 (80V)
+  digitalWrite(PIN_ENABLE_80V, HIGH);
+  Serial.println(F("   2. Boost 80V: ENCENDIDA (Sistema Listo)."));
+}
+
+void apagarSistema() {
+  // Apagamos todo junto (o primero la alta tensión por seguridad)
+  digitalWrite(PIN_ENABLE_80V, LOW);
+  digitalWrite(PIN_ENABLE_12V, LOW);
+  Serial.println(F(">> SISTEMA APAGADO COMPLETAMENTE."));
 }
 
 void setup() {
   Serial.begin(115200);
 
-  // 1. Configurar Pin del Switch Load (Alimentación)
-  pinMode(LOAD_SW_PIN, OUTPUT);
-  // IMPORTANTE: Iniciamos en LOW para que el sistema arranque APAGADO por seguridad.
-  // Recordatorio: GPIO LOW -> 2N7002 OFF -> PMOS Gate Pull-Up -> PMOS OFF.
-  digitalWrite(LOAD_SW_PIN, LOW); 
-
-  // 2. Configurar Pines de Disparo
+  // Configurar Pines
+  pinMode(PIN_ENABLE_12V, OUTPUT);
+  pinMode(PIN_ENABLE_80V, OUTPUT);
   pinMode(PULSE_PIN, OUTPUT);
-  digitalWrite(PULSE_PIN, LOW);
-
   pinMode(TRIG_PIN, OUTPUT);
+
+  // ESTADO INICIAL: Todo Apagado
+  digitalWrite(PIN_ENABLE_12V, LOW);
+  digitalWrite(PIN_ENABLE_80V, LOW);
+  digitalWrite(PULSE_PIN, LOW);
   digitalWrite(TRIG_PIN, LOW);
 
-  // Esperar a que el puerto serie conecte (útil para ESP32 nativos)
-  while (!Serial) {
-    delay(10);
-  }
+  // Esperar puerto serie
+  while (!Serial) { delay(10); }
 
-  Serial.println(F("--- SISTEMA DE CONTROL DE TESIS ---"));
-  Serial.println(F("'H' -> Habilitar Energía (High)"));
-  Serial.println(F("'L' -> Deshabilitar Energía (Low)"));
-  Serial.println(F("'P' -> Disparar Solenoide (Pulse)"));
-  Serial.println(F("-----------------------------------"));
+  Serial.println(F("--- CONTROL DE LANZADOR (SECUENCIAL) ---"));
+  Serial.println(F("'H' -> Habilitar Energía (Secuencia 12V -> 2s -> 80V)"));
+  Serial.println(F("'L' -> Apagar Todo"));
+  Serial.println(F("'P' -> Disparar Solenoide"));
+  Serial.println(F("----------------------------------------"));
 }
 
 void loop() {
-  if (!Serial.available()) {
-    return;
-  }
+  if (!Serial.available()) return;
 
-  // Leemos el caracter y lo convertimos a mayúscula por si acaso
-  char incoming =  toupper(static_cast<char>(Serial.read()));
-
-  // Ignoramos saltos de línea (\n) o retornos de carro (\r) del monitor serie
+  char incoming = toupper(static_cast<char>(Serial.read()));
+  
+  // Limpiar saltos de línea
   if (incoming == '\n' || incoming == '\r') return;
 
-  if (incoming == 'P') {
-    sendPulse();
-  } 
-  else if (incoming == 'H') {
-    digitalWrite(LOAD_SW_PIN, HIGH);
-    Serial.println(F(">> COMANDO: Switch Load HABILITADO (ON)"));
-  } 
-  else if (incoming == 'L') {
-    digitalWrite(LOAD_SW_PIN, LOW);
-    Serial.println(F(">> COMANDO: Switch Load DESHABILITADO (OFF)"));
+  switch (incoming) {
+    case 'P':
+      sendPulse();
+      break;
+      
+    case 'H':
+      encenderSistemaSecuencial();
+      break;
+      
+    case 'L':
+      apagarSistema();
+      break;
   }
 }

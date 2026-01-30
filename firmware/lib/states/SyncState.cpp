@@ -11,7 +11,7 @@
 #include "StateManager.h"
 #include "DataManager.h"
 #include "SupabaseClient.h"
-#include "UserInterface.h"
+#include "HardwareManager.h"
 
 #include "Events.h"
 #include "config.h"
@@ -41,7 +41,7 @@
 struct SyncTaskParams {
     DataManager* dataManager;
     SupabaseClient* supabaseClient;
-    UserInterface* userInterface;
+    HardwareManager* hardwareManager;
     QueueHandle_t fsmQueue;
 };
 
@@ -66,9 +66,10 @@ void syncTaskFunction(void* parameter) {
     DataManager* dataManager = params->dataManager;
     SupabaseClient* supabaseClient = params->supabaseClient;
     QueueHandle_t fsmQueue = params->fsmQueue;
-    UserInterface* ui = params->userInterface;
+    HardwareManager* hw = params->hardwareManager;
     
-    ui->setLedPattern(LED_SYNCING);
+    //Send CMD
+    //hw->setLedPattern(LED_SYNCING);
 
     String accessToken = "";
     bool syncFailed = false;
@@ -78,7 +79,9 @@ void syncTaskFunction(void* parameter) {
     String pass = dataManager->getWifiPassword();
     if (ssid.length() == 0) {
         LOG_PRINTLN("[SyncTask] FATAL: No WiFi credentials set in NVS.");
-        ui->setLedPattern(LED_ERROR_WIFI);
+        
+        //Send CMD
+        //ui->setLedPattern(LED_ERROR_WIFI);
         syncFailed = true;
     } else {
         LOG_PRINTF("[SyncTask] Connecting to WiFi: %s\n", ssid.c_str());
@@ -88,7 +91,8 @@ void syncTaskFunction(void* parameter) {
         while (WiFi.status() != WL_CONNECTED && retries < 20) {
             if (g_cancelSync) {
                 LOG_PRINTLN("[SyncTask] WiFi connection cancelled.");
-                ui->setLedPattern(LED_ERROR_WIFI);
+                //Send CMD
+                //ui->setLedPattern(LED_ERROR_WIFI);
                 syncFailed = true;
                 break;
             }
@@ -108,7 +112,8 @@ void syncTaskFunction(void* parameter) {
         LOG_PRINTLN("\n[SyncTask] WiFi connected. Logging in...");
         if (!supabaseClient->login(DEVICE_EMAIL, DEVICE_PASSWORD, accessToken)) {
             LOG_PRINTLN("[SyncTask] FATAL: Supabase login failed.");
-            ui->setLedPattern(LED_ERROR_DB);
+            //Send CMD
+            //ui->setLedPattern(LED_ERROR_DB);
             syncFailed = true;
         } else {
             LOG_PRINTLN("[SyncTask] Login successful.");
@@ -232,13 +237,14 @@ SyncState::SyncState(DataManager* dataManager, SupabaseClient* supabaseClient)
 
 void SyncState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering SyncState... Launching background task.");
-    manager->getUserInterface()->setLedPattern(LED_SYNCING);    
+    //Send CMD
+    //manager->getUserInterface()->setLedPattern(LED_SYNCING);    
     g_cancelSync = false; // Resetea la bandera de cancelación
 
     static SyncTaskParams params; 
     params.dataManager = this->dataManager;
     params.supabaseClient = this->supabaseClient;
-    params.userInterface = manager->getUserInterface();
+    params.hardwareManager = manager->getHardwareManager();
     params.fsmQueue = manager->getEventQueue();
 
     // Lanza la tarea
@@ -285,13 +291,15 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_SYNC_COMPLETED:
             LOG_PRINTLN("[SyncState] Event: Sync Completed. Changing to IdleState.");
-            manager->getUserInterface()->setLedPattern(LED_SUCCESS);
+            //Send CMD
+            //manager->getUserInterface()->setLedPattern(LED_SUCCESS);
             manager->changeState(new IdleState());
             break;
 
         case EVENT_SYNC_FAILED:
             LOG_PRINTLN("[SyncState] Event: Sync FAILED. Changing to IdleState.");
-            manager->getUserInterface()->setLedPattern(LED_ERROR_DB);
+            //Send CMD
+            //manager->getUserInterface()->setLedPattern(LED_ERROR_DB);
             manager->changeState(new IdleState());
             break;
         

@@ -23,7 +23,7 @@
  ****************************************************************/
 class State; 
 class DataManager; // Dependency
-class UserInterface; // Dependency
+class HardwareManager; // Dependency
 class SupabaseClient; // Dependency
 class WebServerManager; // Dependency
 
@@ -42,7 +42,7 @@ public:
      * @param dataManager A pointer to the global DataManager instance.
      */
     StateManager(DataManager* dataManager, SupabaseClient* supabaseClient, 
-                UserInterface* ui, WebServerManager* ws);
+                HardwareManager* hw, WebServerManager* ws);
 
     /**
      * @brief Cleans up the queue and current state.
@@ -71,7 +71,7 @@ public:
     QueueHandle_t getEventQueue() const;
     DataManager* getDataManager() const;
     SupabaseClient* getSupabaseClient() const;
-    UserInterface* getUserInterface() const;
+    HardwareManager* getHardwareManager() const;
     WebServerManager* getWebServerManager() const;
 
 private:
@@ -79,7 +79,7 @@ private:
     QueueHandle_t eventQueue;
     DataManager* dataManager;
     SupabaseClient* supabaseClient;
-    UserInterface* userInterface;
+    HardwareManager* hw;
     WebServerManager* ws;
 };
 

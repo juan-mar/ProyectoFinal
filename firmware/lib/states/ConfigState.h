@@ -19,7 +19,7 @@
  ****************************************************************/
 class DataManager;
 class TrainingSession;
-class WebServerManager; // Futuro módulo
+class WebServerManager;
 
 /****************************************************************
  * Class Declarations
@@ -41,9 +41,9 @@ protected:
     virtual void update(StateManager* manager) override;
 
 private:
-    DataManager* dataManager;       // Pointer to the injected dependency
-    TrainingSession* sessionConfig; // Pointer to the injected dependency
-    WebServerManager* webServer; // Futuro puntero
+    DataManager* dataManager;       
+    TrainingSession* sessionConfig; 
+    WebServerManager* webServer; 
 };
 
 #endif // CONFIG_STATE_H

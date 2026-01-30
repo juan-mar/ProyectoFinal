@@ -7,39 +7,31 @@
 #include "StateManager.h"
 #include "DataManager.h"
 #include "TrainingSession.h"
-#include "RemoteControl.h" 
-#include "UserInterface.h"
+#include "HardwareManager.h"
 #include "ConfigState.h"
 #include "Events.h"
 #include "config.h"
 
 // Constructor actualizado con RemoteControl
 ManualPlayState::ManualPlayState(DataManager* dm, TrainingSession* session)
-    : dataManager(dm), remoteControl(nullptr), currentSession(session)
+    : dataManager(dm), currentSession(session)
 {
 }
 
 void ManualPlayState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ManualPlayState...");
     
-    // 1. Encender el Hardware (Power Gating)
-    manager->getUserInterface()->setRemoteRxPower(true);
+    // 1. Inicializar HW del control remoto
+    //Send CMD
+    //manager->getHardwareManager()->setRemoteRxPower(true);
     
     // 2. Esperar estabilización (IMPORTANTE)
     // Los módulos de radio tardan unos ms en arrancar al recibir energía.
     vTaskDelay(50 / portTICK_PERIOD_MS); 
 
-    // 3. Crear el Driver (Software)
-    this->remoteControl = new RemoteControl();
-    
-    // 4. Iniciar la lógica del Driver
-    if (this->remoteControl != nullptr) {
-        this->remoteControl->begin(manager->getEventQueue());
-        LOG_PRINTLN("RemoteControl initialized.");
-    }
-
-    manager->getUserInterface()->setLedPattern(LED_SUCCESS);
-    lastActionTime = millis();
+    //3. Indicacion led del estado actual
+    //Send CMD
+    //manager->getUserInterface()->setLedPattern(LED_SUCCESS);
 }
 
 void ManualPlayState::execute(StateManager* manager) {
@@ -55,16 +47,12 @@ void ManualPlayState::execute(StateManager* manager) {
 void ManualPlayState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting ManualPlayState...");
 
-    // 1. Detener y Borrar Driver (Software)
-    if (this->remoteControl != nullptr) {
-        this->remoteControl->stop();
-        delete this->remoteControl; // Libera la memoria
-        this->remoteControl = nullptr;
-        LOG_PRINTLN("RemoteControl object deleted.");
-    }
+    // 1. Detener Software y HW del control remoto
+    // Send CMD
 
     // 2. Apagar Hardware (Ahorro de energía)
-    manager->getUserInterface()->setRemoteRxPower(false);
+    //Send CMD 
+    //manager->getUserInterface()->setRemoteRxPower(false);
 
     // 3. Limpiar Sesión
     if (currentSession != nullptr) {
@@ -89,7 +77,7 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_TRAINING_FAILED:
             LOG_PRINTLN("[Manual] Reward Trigger Failed (Jam/Error).");
             // Feedback Visual de error
-            manager->getUserInterface()->setLedPattern(LED_ERROR_DB); 
+            //manager->getUserInterface()->setLedPattern(LED_ERROR_DB); 
             saveRun("fail");
             break;
 
@@ -116,29 +104,14 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
 }
 
 void ManualPlayState::update(StateManager* manager) {
-    // Si la librería de radio necesita polling constante (no usa interrupciones),
-    // llamamos a su update aquí. Si usa IRQ, esto puede quedar vacío.
-    if (remoteControl != nullptr) {
-        remoteControl->update();
-    }
+
 }
 
-// --- Helper Privado ---
 void ManualPlayState::saveRun(const char* result) {
     if (currentSession == nullptr) return;
-
-    // 1. Calcular duración de ESTE disparo
-    unsigned long now = millis();
-    int durationSeconds = (now - lastActionTime) / 1000;
     
-    // Evitar duraciones negativas o cero si es muy rápido
-    if (durationSeconds < 1) durationSeconds = 1;
-    
-    lastActionTime = now; // Resetear timer para el siguiente disparo
-
     // 2. Completar datos
     currentSession->setResult(result);
-    currentSession->setDuration(durationSeconds);
     // Nota: setStartedAt ya se configuró en ConfigState con la hora del celular
 
     // 3. Serializar y Guardar

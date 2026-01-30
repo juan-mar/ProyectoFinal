@@ -13,7 +13,6 @@
 // Forward Declarations
 class DataManager;
 class TrainingSession;
-class RemoteControl;
 
 class ManualPlayState : public State {
 public:
@@ -35,11 +34,7 @@ protected:
 
 private:
     DataManager* dataManager;
-    RemoteControl* remoteControl;
     TrainingSession* currentSession;
-
-    // Para calcular duración entre disparos
-    unsigned long lastActionTime;
     
     // Helper para guardar y limpiar
     void saveRun(const char* result);

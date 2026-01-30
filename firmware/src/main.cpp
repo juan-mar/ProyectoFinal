@@ -11,7 +11,7 @@
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
 #include "SupabaseClient.h"
-#include "UserInterface.h"
+#include "HardwareManager.h"
 #include "Credentials.h"
 #include "TrainingSession.h"
 #include "WebServerManager.h"
@@ -31,7 +31,7 @@
 StateManager* g_stateManager = nullptr;
 DataManager* g_dataManager = nullptr;
 SupabaseClient* g_supabaseClient = nullptr;
-UserInterface* g_userInterface = nullptr;
+HardwareManager* g_hardwareManager = nullptr;
 WebServerManager* g_webServerManager = nullptr;
 
 /****************************************************************
@@ -78,8 +78,8 @@ void setup() {
     g_supabaseClient = new SupabaseClient(SUPABASE_URL, SUPABASE_API_KEY);
     LOG_PRINTLN("SupabaseClient initialized.");
 
-    // 4. Create and initialize UserInterface
-    g_userInterface = new UserInterface();
+    // 4. Create and initialize HW_Manager
+    g_hardwareManager = new HardwareManager();
     LOG_PRINTLN("UserInterface initialized.");
 
     // 5. Create WebServerManager
@@ -87,7 +87,7 @@ void setup() {
     LOG_PRINTLN("WebServerManager initialized.");
 
     //6. Create StateManager and inject DataManager dependency
-    g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_userInterface, g_webServerManager);
+    g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_hardwareManager, g_webServerManager);
     LOG_PRINTLN("StateManager initialized. Starting FSM...");
 
     g_webServerManager->setDataManager(g_dataManager);
@@ -96,7 +96,7 @@ void setup() {
     g_stateManager->begin();
     
     // 7. Initialize UserInterface with FSM event queue
-    g_userInterface->init(g_stateManager->getEventQueue());
+    g_hardwareManager->init(g_stateManager->getEventQueue());
 
     // 8. Create the StateManager's dedicated task
     xTaskCreate(
@@ -151,12 +151,12 @@ void stateManagerTask(void* parameter) {
 
 void userInterfaceTask(void* parameter) {
     while (true) {
-        if (g_userInterface != nullptr) {
+        if (g_hardwareManager != nullptr) {
             // Esta función revisa millis() y cambia los pines
             // No bloqueante.
-            g_userInterface->update();
+            g_hardwareManager->update();
         }
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(HardwareManager::LOOP_PERIOD_MS / portTICK_PERIOD_MS);
     }
 }
 

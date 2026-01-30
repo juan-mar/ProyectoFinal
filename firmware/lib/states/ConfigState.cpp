@@ -12,7 +12,7 @@
 #include "TrainingSession.h"
 #include "Events.h"
 #include "config.h"
-#include "UserInterface.h"
+#include "HardwareManager.h"
 #include "WebServerManager.h"
 
 // States we can transition to
@@ -35,13 +35,15 @@
  ****************************************************************/
 
 ConfigState::ConfigState(DataManager* dataManager, WebServerManager* webServer) 
-    : dataManager(dataManager), webServer(webServer) // Constructor stores the pointer
+    : dataManager(dataManager), webServer(webServer) 
 {}
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
     this->sessionConfig = new TrainingSession();
-    manager->getUserInterface()->setLedPattern(LED_IDLE_OFFLINE);
+    
+    //TODO: Set LEDs as IDLE OFFLINE-CONFIG
+    //manager->getUserInterface()->setLedPattern(LED_IDLE_OFFLINE);
 
     webServer->setTargetSession(this->sessionConfig);
     webServer->begin();
