@@ -2,10 +2,12 @@
 #define RX_H
 
 #include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEScan.h>
-#include <BLEAdvertisedDevice.h>
+//#include <BLEDevice.h>
+//#include <BLEUtils.h>
+//#include <BLEScan.h>
+//#include <BLEAdvertisedDevice.h>
+
+#include <NimBLEDevice.h>
 
 
 
@@ -26,6 +28,12 @@ class Receptor {
     volatile unsigned long ultimaActualizacion; 
 
     unsigned long _tiempoUltimoReinicio;
+
+    // AGREGA ESTO: Puntero para controlar el callback
+    BLEAdvertisedDeviceCallbacks* _pCallbacks = nullptr; 
+    
+    // AGREGA ESTO: Bandera para controlar si el sistema debe seguir funcionando
+    bool _sistemaActivo = false;
 
 
     public:
@@ -56,6 +64,9 @@ class Receptor {
 
     void setNewMsg(bool val);
     bool isNewMsg();
+
+    // AGREGA ESTO: Prototipo de la función stop
+    void stop();
 
 };
 
