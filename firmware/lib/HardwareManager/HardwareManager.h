@@ -1,31 +1,75 @@
 #ifndef HARDWARE_MANAGER_H
 #define HARDWARE_MANAGER_H
 
+/****************************************************************
+ * Headers
+ ****************************************************************/
 #include <Arduino.h>
 #include <freertos/queue.h>
-#include "Events.h"       // Para poder enviar eventos a la FSM
-#include "RemoteControl.h" // Tu driver de NRF24
-//#include "BleScanner.h"    // Tu nuevo driver de BLE
+#include "Events.h"                 // Para poder enviar eventos a la FSM
+#include "RemoteControl.h"          // Tu driver de NRF24
+#include "HardwareConfig.h"         // Configuración centralizada de pines
+//#include "BleScanner.h"            // Tu nuevo driver de BLE
 
-// --- COMANDOS: Órdenes que recibe el HardwareManager ---
+/****************************************************************
+ * @brief Hardware Command Types
+ * Órdenes que otros módulos pueden enviar a HardwareManager
+ * para controlar actuadores y periféricos desde el thread de HW.
+ ****************************************************************/
 enum HwCmdType {
-    CMD_NOOP,
+    CMD_NOOP = 0,
     
-    // Actuadores
-    CMD_FIRE_SOLENOID,      // Disparar pelota
-    CMD_SET_LED_PATTERN,    // Cambiar luces
+    // --- TAG / RFID Control ---
+    CMD_TAG_POWER_ON,               // Encender TAG (lector RFID)
+    CMD_TAG_POWER_OFF,              // Apagar TAG (ahorrar energía)
+    CMD_TAG_CALIBRATION_MODE,       // Entrar modo calibración
+    CMD_TAG_DETECTION_MODE,         // Entrar modo detección normal
     
-    // Gestión de Energía / Drivers
-    CMD_ENABLE_REMOTE,      // Prender radio NRF24
-    CMD_DISABLE_REMOTE,     // Apagar radio NRF24
-    CMD_ENABLE_BLE,         // Iniciar escaneo BLE
-    CMD_DISABLE_BLE         // Detener escaneo BLE
+    // --- Remote Control (NRF24) ---
+    CMD_REMOTE_POWER_ON,            // Encender receptor NRF24
+    CMD_REMOTE_POWER_OFF,           // Apagar receptor NRF24
+    
+    // --- LEDs Control ---
+    CMD_LED_SEQUENCE_START,         // Iniciar secuencia de LEDs (ej: calibración)
+    CMD_LED_SEQUENCE_STOP,          // Detener secuencia
+    CMD_LED_SET_PATTERN,            // Cambiar patrón LED fijo (parameter: patrón)
+    CMD_LED_OFF,                    // Apagar todos los LEDs
+    
+    // --- Solenoid / Reward Dispenser ---
+    CMD_SOLENOID_FIRE,              // Disparar solenoide (entregar reward)
+    CMD_SOLENOID_SINGLE_PULSE,      // Un pulso corto (parameter: duración ms)
+    
+    // --- Launcher Control ---
+    CMD_LAUNCHER_ON,                // Encender lanzador (pin digital)
+    CMD_LAUNCHER_OFF,               // Apagar lanzador
+    CMD_LAUNCHER_FIRE,              // Disparar pelota (envía pulso)
+    
+    // --- Gestión de Energía / Drivers ---
+    CMD_ENABLE_BLE,                 // Iniciar escaneo BLE
+    CMD_DISABLE_BLE                 // Detener escaneo BLE
 };
 
-// Estructura del mensaje en la cola de comandos
+/****************************************************************
+ * @brief LED Pattern Types
+ * Patrones predefinidos para los LEDs
+ ****************************************************************/
+enum LedPattern {
+    LED_OFF = 0,
+    LED_IDLE,                       // Parpadeo lento (standby)
+    LED_CALIBRATION,                // Secuencia parpadeante rápida
+    LED_ACTIVE,                     // LEDs fijos encendidos
+    LED_ERROR,                      // Parpadeo rojo urgente
+    LED_SUCCESS                     // Parpadeo verde rápido
+};
+
+/****************************************************************
+ * @brief Hardware Command Message
+ * Estructura enviada por la cola de comandos del HardwareManager
+ ****************************************************************/
 struct HwMessage {
     HwCmdType command;
-    int parameter; // Ej: LedPattern enum o duración extra
+    int parameter;                  // Ej: LedPattern, duración, etc.
+    unsigned long timestamp;        // Timestamp del comando
 };
 
 class HardwareManager {
@@ -62,24 +106,49 @@ private:
     RemoteControl _remoteControl;
     //BleScanner    _bleScanner;
 
-    // Estado Interno
-    bool _remoteEnabled;
-    bool _bleEnabled;
-    
-    // Solenoide
-    bool _solenoidActive;
-    unsigned long _solenoidOffTime;
+    // --- Estado de Periféricos ---
+    struct PeripheralState {
+        bool tagEnabled;            // TAG/RFID reader on/off
+        bool tagCalibrationMode;    // true = calibración, false = detección
+        bool remoteEnabled;         // Remote NRF24 on/off
+        bool bleEnabled;            // BLE scanner on/off
+    } _peripheralState;
 
-    // Sensores
+    // --- Estado de Actuadores ---
+    struct ActuatorState {
+        bool solenoidActive;        // Solenoide disparándose
+        unsigned long solenoidOffTime;  // Cuándo apagar el solenoide
+        
+        bool launcherActive;        // Lanzador encendido
+        unsigned long launcherOffTime;  // Cuándo apagar el lanzador
+        
+        LedPattern currentLedPattern;   // Patrón LED actual
+        bool ledSequenceRunning;    // Secuencia de LEDs en curso
+        unsigned long ledBlinkRate; // Velocidad de parpadeo
+        unsigned long ledLastToggle;    // Último cambio de LED
+        bool ledCurrentState;       // Estado actual (on/off)
+    } _actuatorState;
+
+    // --- Timing ---
     unsigned long _lastSensorCheck;
-
-    static const uint8_t PIN_MODE_SWITCH = 25;
 
     // Métodos Privados de ayuda
     void processCommand(HwMessage msg);
     void updateActuators();
+    void updateLeds();
+    void updateSolenoid();
+    void updateLauncher();
     void checkDrivers();
-    void readSensors(); // Batería, Temperatura
+    void readSensors();            // Batería, Temperatura
+    
+    // Métodos auxiliares específicos
+    void enableTag(bool mode = false);  // mode: false=detección, true=calibración
+    void disableTag();
+    void fireSolenoid(unsigned long durationMs = SOLENOID_PULSE_DURATION_MS);
+    void fireLauncher(unsigned long durationMs = LAUNCHER_FIRE_DURATION_MS);
+    void setLedPattern(LedPattern pattern);
+    void startLedSequence(LedPattern pattern, unsigned long blinkRate);
+    void stopLedSequence();
 };
 
 #endif // HARDWARE_MANAGER_H

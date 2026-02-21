@@ -17,6 +17,7 @@
 
 // States we can transition to
 #include "SyncState.h"
+#include "CalibrationState.h"
 
 // #include "ManualPlayState.h"
 // #include "AutoPlayState.h"
@@ -81,6 +82,12 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
+            break;
+
+        case EVENT_START_CALIBRATION:
+            LOG_PRINTLN("[ConfigState] Event: Start Calibration. Changing to CalibrationState.");
+            this->sessionConfig = nullptr;
+            manager->changeState(new CalibrationState(dataManager, manager->getHardwareManager()));
             break;
 
         case EVENT_START_MANUAL_PLAY:

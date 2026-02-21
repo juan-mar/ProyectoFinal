@@ -22,9 +22,15 @@ enum EventType {
     // --- System / Null Event ---
     EVENT_NULL = 0,                 // Invalid or default event
 
-    // --- Events from ConfigState (WebServer) ---
+    // --- Events from ConfigState ---
     EVENT_START_MANUAL_PLAY,        // User pressed "Start Manual" on web
     EVENT_START_AUTO_PLAY,          // User pressed "Start Auto" on web
+    EVENT_START_CALIBRATION,        // User pressed "Start Calibration" on web
+
+    // --- Events from Calibration State ---
+    EVENT_CALIBRATION_COMPLETE,     // Calibration process completed successfully
+    EVENT_CALIBRATION_CANCEL,       // Calibration process cancelled by user
+    EVENT_CALIBRATION_FAILED,       // Calibration process failed (timeout or error)
 
     // --- Events from Play States ---
     EVENT_PLAY_FINISHED,            // User pressed "Finish" button (manual or auto)

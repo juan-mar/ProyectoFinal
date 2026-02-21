@@ -122,16 +122,33 @@ void setup() {
     // --- Instrucciones para el simulador ---
     LOG_PRINTLN("\n--- Event Simulator Ready ---");
     LOG_PRINTLN("Send commands via Serial Monitor (No new line/CR):");
+    LOG_PRINTLN("\n--- FSM Events ---");
     LOG_PRINTLN(" 'o' -> EVENT_MODE_ONLINE_ACTIVATED");
     LOG_PRINTLN(" 'f' -> EVENT_MODE_OFFLINE_ACTIVATED");
     LOG_PRINTLN(" 's' -> EVENT_SYNC_COMPLETED (Simulate)");
     LOG_PRINTLN(" 'e' -> EVENT_SYNC_FAILED (Simulate)");
-    LOG_PRINTLN(" 'm' -> EVENT_START_MANUAL_PLAY");    
+    LOG_PRINTLN(" 'm' -> EVENT_START_MANUAL_PLAY");
+    LOG_PRINTLN(" 'c' -> EVENT_START_CALIBRATION");
 
+    LOG_PRINTLN("\n--- Hardware Commands (via HardwareManager) ---");
+    LOG_PRINTLN(" 'T' -> TAG power ON (detection mode)");
+    LOG_PRINTLN(" 't' -> TAG power OFF");
+    LOG_PRINTLN(" 'C' -> TAG calibration mode");
+    LOG_PRINTLN(" 'R' -> Remote NRF24 power ON");
+    LOG_PRINTLN(" 'r' -> Remote NRF24 power OFF");
+    LOG_PRINTLN(" 'L' -> LED pattern: ACTIVE");
+    LOG_PRINTLN(" 'l' -> LED pattern: OFF");
+    LOG_PRINTLN(" 'E' -> LED pattern: ERROR");
+    LOG_PRINTLN(" 'S' -> LED pattern: SUCCESS");
+    LOG_PRINTLN(" 'A' -> Solenoid fire");
+    LOG_PRINTLN(" 'F' -> Launcher fire");
+    LOG_PRINTLN(" 'B' -> BLE Scanner ON");
+    LOG_PRINTLN(" 'b' -> BLE Scanner OFF");
+
+    LOG_PRINTLN("\n--- Data Tests ---");
     LOG_PRINTLN(" 'p' -> print numero de trainings pendientes");
     LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
     LOG_PRINTLN(" 'l' -> List local dog_list.json content");
-
 }
 
 /****************************************************************
@@ -198,6 +215,72 @@ void loop() {
                     break;
                 case 'm': // Manual Play
                     event.type = EVENT_START_MANUAL_PLAY;
+                    break;
+                case 'c': // Calibration
+                    event.type = EVENT_START_CALIBRATION;
+                    break;
+
+                // --- HARDWARE COMMANDS ---
+                case 'T': // TAG ON (detection)
+                    g_hardwareManager->sendCommand(CMD_TAG_POWER_ON, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_TAG_POWER_ON sent (detection mode)");
+                    break;
+                case 't': // TAG OFF
+                    g_hardwareManager->sendCommand(CMD_TAG_POWER_OFF, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_TAG_POWER_OFF sent");
+                    break;
+                case 'C': // TAG Calibration
+                    g_hardwareManager->sendCommand(CMD_TAG_CALIBRATION_MODE, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_TAG_CALIBRATION_MODE sent");
+                    break;
+                case 'R': // Remote ON
+                    g_hardwareManager->sendCommand(CMD_REMOTE_POWER_ON, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_REMOTE_POWER_ON sent");
+                    break;
+                case 'r': // Remote OFF
+                    g_hardwareManager->sendCommand(CMD_REMOTE_POWER_OFF, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_REMOTE_POWER_OFF sent");
+                    break;
+                case 'L': // LED Active
+                    g_hardwareManager->sendCommand(CMD_LED_SET_PATTERN, LED_ACTIVE);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_LED_SET_PATTERN sent (ACTIVE)");
+                    break;
+                case 'E': // LED Error
+                    g_hardwareManager->sendCommand(CMD_LED_SET_PATTERN, LED_ERROR);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_LED_SET_PATTERN sent (ERROR)");
+                    break;
+                case 'S': // LED Success
+                    g_hardwareManager->sendCommand(CMD_LED_SET_PATTERN, LED_SUCCESS);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_LED_SET_PATTERN sent (SUCCESS)");
+                    break;
+                case 'A': // Solenoid Fire
+                    g_hardwareManager->sendCommand(CMD_SOLENOID_FIRE, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_SOLENOID_FIRE sent");
+                    break;
+                case 'F': // Launcher Fire
+                    g_hardwareManager->sendCommand(CMD_LAUNCHER_FIRE, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_LAUNCHER_FIRE sent");
+                    break;
+                case 'B': // BLE ON
+                    g_hardwareManager->sendCommand(CMD_ENABLE_BLE, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_ENABLE_BLE sent");
+                    break;
+                case 'b': // BLE OFF
+                    g_hardwareManager->sendCommand(CMD_DISABLE_BLE, 0);
+                    sendEvent = false;
+                    LOG_PRINTLN("[TEST] CMD_DISABLE_BLE sent");
+                    break;
                     break;
                 // --- PRUEBAS DE DATOS ---
                 case 'w': // Write Session (Simular fin de juego)
