@@ -9,7 +9,7 @@
 #include "Events.h"                 // Para poder enviar eventos a la FSM
 #include "RemoteControl.h"          // Tu driver de NRF24
 #include "HardwareConfig.h"         // Configuración centralizada de pines
-//#include "BleScanner.h"            // Tu nuevo driver de BLE
+#include "rx.h"                     // Tu nuevo driver de BLE
 
 /****************************************************************
  * @brief Hardware Command Types
@@ -104,7 +104,7 @@ private:
 
     // Drivers Internos
     RemoteControl _remoteControl;
-    //BleScanner    _bleScanner;
+    Receptor _bleScanner;
 
     // --- Estado de Periféricos ---
     struct PeripheralState {

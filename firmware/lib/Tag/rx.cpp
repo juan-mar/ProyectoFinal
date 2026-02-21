@@ -137,6 +137,7 @@ Receptor::Receptor(String targetMac) {
     _escaneando = false;
     globalReceptorRef = this;     // Enganchamos el puntero global
     new_msg = false;
+    state = 0;
 }
 
 
@@ -327,7 +328,7 @@ void Receptor::stop() {
     Serial.println("Receptor detenido y memoria liberada.");
 }
 
-void Receptor::scan(int state) {
+void Receptor::scan() {
   // Ciclo infinito que hace la limpieza de datos
   this->clear();
 
@@ -341,10 +342,10 @@ void Receptor::scan(int state) {
   //}
 
   if (this->isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
-    if (state == CALIB || calib) {          // si el carácter es 'c'
+    if (state == CALIBRATION_RX || calib) {          // si el carácter es 'c'
       calib = this->calibracion();        // llamar a la función calibracion
     }
-    else if (state ==  DETECT || flag) {               // si el carácter es 'd' o ya se detecto la señal
+    else if (state ==  DETECTION_RX || flag) {               // si el carácter es 'd' o ya se detecto la señal
       if(!flag) {
       calibStart = millis();
       }
@@ -366,9 +367,3 @@ void Receptor::scan(int state) {
     }
   }
 }
-
-
-
-
-
-scan(state, CALIBRA, detectiojn)

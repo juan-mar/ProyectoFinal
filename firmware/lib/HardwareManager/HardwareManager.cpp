@@ -2,7 +2,7 @@
 #include "Config.h"
 
 HardwareManager::HardwareManager() 
-    : _lastSensorCheck(0) {
+    : _lastSensorCheck(0), _bleScanner(MAC_ADDR) {
     // Inicializar estados de periféricos
     _peripheralState.tagEnabled = false;
     _peripheralState.tagCalibrationMode = false;
@@ -24,6 +24,7 @@ HardwareManager::HardwareManager()
 void HardwareManager::init(QueueHandle_t fsmQueue) {
     _fsmQueue = fsmQueue;
     _commandQueue = xQueueCreate(HW_COMMAND_QUEUE_SIZE, sizeof(HwMessage));
+
 
     LOG_PRINTLN("HardwareManager: Initializing pins...");
 
@@ -153,12 +154,14 @@ void HardwareManager::processCommand(HwMessage msg) {
         // --- TAG / RFID CONTROL ---
         case CMD_TAG_POWER_ON:
             #if ENABLE_TAG_READER
+            _bleScanner.init(); // Aseguramos que el driver esté inicializado
             enableTag(msg.parameter == 1);  // parameter: 0=detección, 1=calibración
             #endif
             break;
 
         case CMD_TAG_POWER_OFF:
             #if ENABLE_TAG_READER
+            _bleScanner.stop(); // Detenemos el escaneo BLE si estaba activo
             disableTag();
             #endif
             break;
@@ -168,6 +171,7 @@ void HardwareManager::processCommand(HwMessage msg) {
             if (_peripheralState.tagEnabled) {
                 _peripheralState.tagCalibrationMode = true;
                 digitalWrite(PIN_TAG_MODE, HIGH);
+                _bleScanner.state = CALIBRATION_RX; // Cambiamos el estado del driver para que sepa que estamos en calibración
                 LOG_PRINTLN("[HW] TAG: Calibration mode enabled");
             }
             #endif
@@ -178,6 +182,7 @@ void HardwareManager::processCommand(HwMessage msg) {
             if (_peripheralState.tagEnabled) {
                 _peripheralState.tagCalibrationMode = false;
                 digitalWrite(PIN_TAG_MODE, LOW);
+                _bleScanner.state = DETECTION_RX; // Cambiamos el estado del driver para que sepa que estamos en detección
                 LOG_PRINTLN("[HW] TAG: Detection mode enabled");
             }
             #endif
@@ -435,7 +440,7 @@ void HardwareManager::checkDrivers() {
     }
     // Nota: El BLE no se chequea aquí porque corre en su propia Task y manda eventos directo
     if(_peripheralState.bleEnabled){
-
+        _bleScanner.scan();
     }
 }
 
