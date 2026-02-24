@@ -14,9 +14,6 @@
 #define CALIBRATION_RX 1
 #define DETECTION_RX 2
 
-static int state = 0;  
-
-
 class Receptor {
     private:
     String _targetMac;
@@ -44,6 +41,7 @@ class Receptor {
 
     public:
 
+    int state;  
 
     //Constructor. Recibe la MAC address del transmisor
     Receptor(String targetMac);
