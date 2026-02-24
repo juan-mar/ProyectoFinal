@@ -108,6 +108,7 @@ public:
         if (mac == _macBuscada) {
 //           LOG_PRINTLN("Dispositivo detectado");  
             _ref->setNewMsg(true);   
+            //LOG_PRINTLN("New Msg: " + String(_ref->isNewMsg()));
             
             calibrating = true;
             
@@ -149,9 +150,11 @@ void Receptor::init() {
     
     // El segundo parámetro 'true' significa: wantDuplicates. Sino se registra el primer valor y nada mas.
     // Guardamos el puntero para poder borrarlo luego
-    _pCallbacks = new FiltradoRapidoCallback(this, _targetMac);
-    _pBLEScan->setAdvertisedDeviceCallbacks(_pCallbacks, true);
-
+    if (_pCallbacks == nullptr) { 
+      _pCallbacks = new FiltradoRapidoCallback(this, _targetMac);
+      _pBLEScan->setAdvertisedDeviceCallbacks(_pCallbacks, true);
+    } 
+    
     // --- AGREGA ESTAS LÍNEAS PARA MÁXIMA VELOCIDAD ---
     
     // Configura la antena para escuchar casi el 100% del tiempo
@@ -174,7 +177,7 @@ void Receptor::_procesarDato(int rssi) {
     rssiActual = rssi; 
     filtro_kalman.filtrado(rssiActual);
     ultimaActualizacion = millis();
-    new_msg = false;
+    //new_msg = false;
 }
 
 bool Receptor::calibracion() {
@@ -298,12 +301,13 @@ void Receptor::setNewMsg(bool val) {
 }
 
 bool Receptor::isNewMsg() {
+  //LOG_PRINTLN("New Msg: " + String(new_msg));
   return new_msg;
 }
 
 
 void Receptor::stop() {
-    //if (!_sistemaActivo) return; // Si ya está apagado, no hacemos nada
+    if (!_sistemaActivo) return; // Si ya está apagado, no hacemos nada
 
     LOG_PRINTLN("Deteniendo Receptor BLE...");
 
@@ -313,20 +317,22 @@ void Receptor::stop() {
         _pBLEScan->clearResults(); // Libera la memoria de los dispositivos encontrados
         
         // Desvinculamos el callback para evitar llamadas fantasma
-        _pBLEScan->setAdvertisedDeviceCallbacks(nullptr);
+        //_pBLEScan->setAdvertisedDeviceCallbacks(nullptr);
     }
 
     // 2. Liberar la memoria del objeto Callback
+    /*
     if (_pCallbacks != nullptr) {
         delete _pCallbacks;
         _pCallbacks = nullptr;
     }
-
+    */
+    
     // 3. Bloquear reinicios futuros
     _sistemaActivo = false;
     _escaneando = false;
     
-    LOG_PRINTLN("Receptor detenido y memoria liberada.");
+    LOG_PRINTLN("Receptor detenido");
 }
 
 void Receptor::scan() {
@@ -335,7 +341,7 @@ void Receptor::scan() {
 
   // Leemos la variable global directamente
   int lecturaRaw = this->getRSSI();
-  
+  //LOG_PRINTLN("Lectura RSSI: " + String(lecturaRaw));
   // Seguridad por si se apaga el dispositivo
   //if (millis() - scanner.getUltimaActualizacion() > 3500) {
   //    lecturaRaw = -100; // Si no hay datos en 3.5s, asumimos lejos
@@ -343,6 +349,7 @@ void Receptor::scan() {
   //}
 
   if (this->isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
+    new_msg = false; // reseteamos la variable para esperar el próximo mensaje
     if (state == CALIBRATION_RX || calib) {          // si el carácter es 'c'
       calib = this->calibracion();        // llamar a la función calibracion
     }

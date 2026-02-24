@@ -63,6 +63,7 @@ void CalibrationState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting CalibrationState...");
 
     hardwareManager->sendCommand(CMD_TAG_POWER_OFF);
+    vTaskDelay(pdMS_TO_TICKS(500));
 }
 
 /****************************************************************

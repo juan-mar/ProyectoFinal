@@ -444,6 +444,7 @@ void HardwareManager::checkDrivers() {
     // Nota: El BLE no se chequea aquí porque corre en su propia Task y manda eventos directo
     if(_peripheralState.bleEnabled){
         _bleScanner.scan();
+        
     }
 }
 
