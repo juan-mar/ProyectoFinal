@@ -49,6 +49,9 @@ enum HwCmdType {
     CMD_DISABLE_BLE                 // Detener escaneo BLE
 };
 
+#define CMD_TAG_PARAM_CALIBRATION   1
+#define CMD_TAG_PARAM_DETECTION     0
+
 /****************************************************************
  * @brief LED Pattern Types
  * Patrones predefinidos para los LEDs

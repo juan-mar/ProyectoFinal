@@ -41,10 +41,11 @@ CalibrationState::CalibrationState(DataManager* dataManager, HardwareManager* ha
 
 void CalibrationState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering CalibrationState...");
-    
+
+    hardwareManager->sendCommand(CMD_TAG_POWER_ON, CMD_TAG_PARAM_CALIBRATION);
+
     // Record the time when calibration started
     calibrationStartTime = millis();
-    
 }
 
 void CalibrationState::execute(StateManager* manager) {
@@ -60,6 +61,8 @@ void CalibrationState::execute(StateManager* manager) {
 
 void CalibrationState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting CalibrationState...");
+
+    hardwareManager->sendCommand(CMD_TAG_POWER_OFF);
 }
 
 /****************************************************************

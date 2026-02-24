@@ -11,7 +11,7 @@
 #include "DataManager.h"
 #include "TrainingSession.h"
 #include "Events.h"
-#include "config.h"
+#include "Config.h"
 #include "HardwareManager.h"
 #include "WebServerManager.h"
 

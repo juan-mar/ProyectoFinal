@@ -155,7 +155,8 @@ void HardwareManager::processCommand(HwMessage msg) {
         case CMD_TAG_POWER_ON:
             #if ENABLE_TAG_READER
             _bleScanner.init(); // Aseguramos que el driver esté inicializado
-            enableTag(msg.parameter == 1);  // parameter: 0=detección, 1=calibración
+            enableTag(msg.parameter == CMD_TAG_PARAM_CALIBRATION);  // parameter: 0=detección, 1=calibración
+            _peripheralState.bleEnabled = true;
             #endif
             break;
 
@@ -163,6 +164,7 @@ void HardwareManager::processCommand(HwMessage msg) {
             #if ENABLE_TAG_READER
             _bleScanner.stop(); // Detenemos el escaneo BLE si estaba activo
             disableTag();
+            _peripheralState.bleEnabled = false;
             #endif
             break;
 
@@ -332,12 +334,13 @@ void HardwareManager::updateLeds() {
 void HardwareManager::enableTag(bool calibrationMode) {
     #if ENABLE_TAG_READER
     if (!_peripheralState.tagEnabled) {
-        digitalWrite(PIN_TAG_POWER, HIGH);
+        //digitalWrite(PIN_TAG_POWER, HIGH);
         _peripheralState.tagEnabled = true;
+        _bleScanner.state = calibrationMode ? CALIBRATION_RX : DETECTION_RX; // Configuramos el estado del driver según el modo
         
         // Configurar modo
         _peripheralState.tagCalibrationMode = calibrationMode;
-        digitalWrite(PIN_TAG_MODE, calibrationMode ? HIGH : LOW);
+        //digitalWrite(PIN_TAG_MODE, calibrationMode ? HIGH : LOW);
         
         LOG_PRINTF("[HW] TAG powered ON (mode: %s)\n", 
                    calibrationMode ? "CALIBRATION" : "DETECTION");

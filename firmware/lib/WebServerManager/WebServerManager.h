@@ -65,6 +65,7 @@ private:
     const char* AP_SSID = "Lanzador_Config";
     const int DNS_PORT = 53;
     const int HTTP_PORT = 80;
+    bool routesConfigured = false;
 
     // --- Internal Setup Methods ---
     void setupRoutes();

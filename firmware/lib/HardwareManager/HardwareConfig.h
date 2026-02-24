@@ -139,7 +139,7 @@
 
 /**
  * @brief Enable/Disable hardware features
- * Útil para compilación condicional en diferentes variantes
+ * Para compilación condicional en diferentes variantes
  */
 #define ENABLE_TAG_READER 1
 #define ENABLE_REMOTE_CONTROL 1

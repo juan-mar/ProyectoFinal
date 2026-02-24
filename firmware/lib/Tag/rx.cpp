@@ -1,4 +1,5 @@
 #include "rx.h"
+#include "Config.h"
 
 
 /************************** DEFINICIONES ****************************/
@@ -105,7 +106,7 @@ public:
         mac.toUpperCase();
         
         if (mac == _macBuscada) {
-            //Serial.println("Dispositivo detectado");  
+//           LOG_PRINTLN("Dispositivo detectado");  
             _ref->setNewMsg(true);   
             
             calibrating = true;
@@ -185,8 +186,8 @@ bool Receptor::calibracion() {
     calibrating = false; // Esperamos a procesar esta muestra antes de tomar otra
     
     int rssi_calib = this->rssiActual;
-    Serial.print("Muestra RSSI: ");
-    Serial.println(rssi_calib);
+    LOG_PRINT("Muestra RSSI: ");
+    LOG_PRINTLN(rssi_calib);
 
     sampleCount++;
     sumRSSI += rssi_calib;
@@ -196,9 +197,9 @@ bool Receptor::calibracion() {
     return true;
   }
   else if (sampleCount >= CAL_SAMPLES) {
-    Serial.println("Fin calibracion");
-    Serial.print("Sample Count: ");
-    Serial.println(sampleCount);
+    LOG_PRINTLN("Fin calibracion");
+    LOG_PRINT("Sample Count: ");
+    LOG_PRINTLN(sampleCount);
     //calibrating = false;
 
     if (sampleCount > 0) {
@@ -227,9 +228,9 @@ bool Receptor::calibracion() {
       // sqrt(varianza) es la Desviación Estándar (Sigma).
       barrier = threshold - 1 * sqrt(this->varianza); 
 
-      Serial.print("Threshold: "); Serial.println(this->threshold);
-      Serial.print("Varianza: "); Serial.println(this->varianza);
-      Serial.print("Barrier:"); Serial.println(barrier);
+      LOG_PRINT("Threshold: "); LOG_PRINTLN(this->threshold);
+      LOG_PRINT("Varianza: "); LOG_PRINTLN(this->varianza);
+      LOG_PRINT("Barrier:"); LOG_PRINTLN(barrier);
 
       suma_diferencias = 0;
     }
@@ -245,7 +246,7 @@ bool Receptor::calibracion() {
 
 bool Receptor::detect_thres() {
   detecting = true;
-  //Serial.println("RSSI Actual: " + String(rssiActual) + " | RSSI Filtrado: " + String(rssi_filtered));
+  //LOG_PRINTLN("RSSI Actual: " + String(rssiActual) + " | RSSI Filtrado: " + String(rssi_filtered));
   int rssi_curr = rssi_filtered;
   if (rssi_curr > this->threshold) { // señal dentro del umbral
     in_thres = true;
@@ -304,7 +305,7 @@ bool Receptor::isNewMsg() {
 void Receptor::stop() {
     //if (!_sistemaActivo) return; // Si ya está apagado, no hacemos nada
 
-    Serial.println("Deteniendo Receptor BLE...");
+    LOG_PRINTLN("Deteniendo Receptor BLE...");
 
     // 1. Detener el motor de escaneo
     if(_pBLEScan != nullptr) {
@@ -325,7 +326,7 @@ void Receptor::stop() {
     _sistemaActivo = false;
     _escaneando = false;
     
-    Serial.println("Receptor detenido y memoria liberada.");
+    LOG_PRINTLN("Receptor detenido y memoria liberada.");
 }
 
 void Receptor::scan() {
@@ -338,7 +339,7 @@ void Receptor::scan() {
   // Seguridad por si se apaga el dispositivo
   //if (millis() - scanner.getUltimaActualizacion() > 3500) {
   //    lecturaRaw = -100; // Si no hay datos en 3.5s, asumimos lejos
-  //    Serial.println("--- Perdió señal ---");
+  //    LOG_PRINTLN("--- Perdió señal ---");
   //}
 
   if (this->isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
@@ -356,7 +357,7 @@ void Receptor::scan() {
         digitalWrite(2, HIGH); // Enciende el LED
       } 
       else if(detected && now - calibStart >= THRES_TIME) {
-        Serial.println("Señal detectada!");
+        LOG_PRINTLN("Señal detectada!");
         digitalWrite(2, LOW); // Apaga el LED
         flag = false;
       }

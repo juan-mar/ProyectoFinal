@@ -19,25 +19,36 @@ WebServerManager::WebServerManager()
 
 // --- Public Methods ---
 void WebServerManager::begin() {
-    LOG_PRINTLN("WS: Starting services...");
+    LOG_PRINTLN("[WEB] Starting services...");
 
     // 1. WiFi AP
+    IPAddress apIP(192, 168, 4, 1);
+    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     WiFi.softAP(AP_SSID);
-    LOG_PRINT("WS: AP IP Address: ");
+    LOG_PRINT("[WEB] AP IP Address: ");
     LOG_PRINTLN(WiFi.softAPIP());
 
     // 2. DNS (Captive Portal)
     dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+    LOG_PRINTLN("[WEB] DNS Captive Portal started");
 
     // 3. Web Server
-    setupRoutes();
-    server.begin();
-    LOG_PRINTLN("WS: HTTP Server started.");
+    if (!routesConfigured) {
+        dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+        setupRoutes();
+        server.begin();
+        routesConfigured = true;
+    }
+
+    LOG_PRINTLN("[WEB] HTTP Server started");
+    LOG_PRINTF("[WEB] SSID: %s\n", AP_SSID);
+    LOG_PRINTLN("[WEB] Open browser and go to http://192.168.4.1");
 }
 
 void WebServerManager::stop() {
-    dnsServer.stop();
-    server.end();
+    //dnsServer.stop();
+    //server.end();
+    vTaskDelay(pdMS_TO_TICKS(500));
     WiFi.softAPdisconnect(true);
     LOG_PRINTLN("WS: Services stopped.");
 }
@@ -61,39 +72,64 @@ void WebServerManager::setStateManager(StateManager* sm) {
 // --- Private: Setup Routes ---
 void WebServerManager::setupRoutes() {
     
-    // 1. Static Files (Frontend)
-    // Servimos todo lo que esté en la raíz de LittleFS
-    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
-
-    // 2. API Routes
-    // Usamos lambdas simples para capturar 'this' y llamar al método privado
-
-    // GET /api/dogs
+    // ==========================================
+    // 1. API ROUTES PRIMERO (Para evitar logs de error)
+    // ==========================================
     server.on("/api/dogs", HTTP_GET, [this](AsyncWebServerRequest *request) {
         this->handleApiGetDogs(request);
     });
 
-    // GET /api/status
     server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
         this->handleApiGetStatus(request);
     });
 
-    // POST /api/start (Requiere manejo de Body)
     server.on("/api/start", HTTP_POST, 
-        // Handler final (solo responde OK)
-        [](AsyncWebServerRequest *request){ request->send(200, "application/json", "{\"status\":\"processing\"}"); },
+        [](AsyncWebServerRequest *request){ }, 
         NULL,
-        // Body Handler (Aquí llegan los datos)
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
             this->handleApiPostStart(request, data, len, index, total);
         }
     );
 
-    // 3. Captive Portal Redirect (404 -> index.html)
+    server.on("/api/calibrate", HTTP_POST, [this](AsyncWebServerRequest *request) {
+        this->handleApiPostCalibrate(request);
+    });
+
+    // ==========================================
+    // 2. TRAMPAS PARA PORTAL CAUTIVO (Atrapar antes de buscar archivos)
+    // ==========================================
+    auto captivePortalRedirect = [](AsyncWebServerRequest *request) {
+        request->redirect("http://192.168.4.1/");
+    };
+
+    server.on("/generate_204", HTTP_ANY, captivePortalRedirect);        // Android
+    server.on("/hotspot-detect.html", HTTP_ANY, captivePortalRedirect); // iOS / Apple
+    server.on("/fwlink", HTTP_ANY, captivePortalRedirect);              // Windows
+
+    // ==========================================
+    // 3. ARCHIVOS ESTÁTICOS 
+    // ==========================================
+    // Ahora, si no es una API ni una trampa, buscará en LittleFS
+    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+
+    // ==========================================
+    // 4. PORTAL CAUTIVO AUTOMÁTICO (onNotFound)
+    // ==========================================
     server.onNotFound([](AsyncWebServerRequest *request) {
-        request->redirect("/");
+        String host = request->host();
+        
+        // Si el usuario ya está en nuestra IP pero pidió algo que no existe, enviamos 404 real.
+        if (host == "192.168.4.1") {
+            request->send(404, "text/plain", "Error 404: Archivo no encontrado");
+        } 
+        // Si el celular está preguntando a escondidas si hay internet 
+        // LO REDIRIGIMOS a nuestra IP. ¡Esto lanza la ventana del Portal Cautivo!
+        else {
+            request->redirect("http://192.168.4.1/");
+        }
     });
 }
+
 
 // --- Private: API Handlers Implementation ---
 void WebServerManager::handleApiGetDogs(AsyncWebServerRequest *request) {
@@ -123,6 +159,7 @@ void WebServerManager::handleApiGetStatus(AsyncWebServerRequest *request) {
     
     doc["pending_sessions"] = dataManager->countPendingSessions();
     doc["storage_percent"] = (total > 0) ? (int)((used * 100) / total) : 0;
+    doc["device_code"] = dataManager->getDeviceID();
     
     // TODO: Leer batería real del UI
     // doc["battery"] = userInterface->getBatteryPercentage(); 
@@ -134,60 +171,93 @@ void WebServerManager::handleApiGetStatus(AsyncWebServerRequest *request) {
 }
 
 void WebServerManager::handleApiPostStart(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    // 1. Reconstruir JSON (Igual que antes)
+    // Reconstruir JSON desde buffer
     String body = "";
     for(size_t i=0; i<len; i++) body += (char)data[i];
     
-    LOG_PRINTLN("WS: Received /api/start Payload:");
+    LOG_PRINTLN("[API START] Nueva sesion recibida");
+    LOG_PRINTLN("Raw JSON payload:");
     LOG_PRINTLN(body);
 
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, body);
 
     if (error) {
-        LOG_PRINTLN("WS Error: JSON Parsing Failed!");
+        LOG_PRINTLN("[ERROR] JSON Parsing fallido");
         request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Invalid JSON\"}");
         return;
     }
 
-    // 2. Extracción de datos
+    // Extraer datos del documento JSON
     const char* dogCode = doc["dog_code"] | ""; 
     const char* mode = doc["mode"] | "manual"; 
-    float temp = doc["temp"] | 0.0;
+    int durationS = doc["duration_s"] | 30;
+    const char* typeJson = doc["type_json"] | "";
     const char* timestamp = doc["timestamp"] | "";
 
+    LOG_PRINTLN("[PARSED] Datos extraidos:");
+    LOG_PRINTF("  DogCode: %s\n", dogCode);
+    LOG_PRINTF("  Mode: %s\n", mode);
+    LOG_PRINTF("  Duration: %d segundos\n", durationS);
+    LOG_PRINTF("  Timestamp: %s\n", timestamp);
+    LOG_PRINTF("  TypeJson: %s\n", typeJson);
+
     if (strlen(dogCode) == 0 || strcmp(dogCode, "undefined") == 0) {
+        LOG_PRINTLN("[ERROR] Dog code vacio o undefined");
         request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Select a dog\"}");
         return;
     }
 
     if (this->targetSession != nullptr) {
         
-        // Escribimos directamente en el objeto de ConfigState
+        // Escribir datos en el objeto de sesion
         this->targetSession->setDogCode(dogCode);
+        this->targetSession->setDuration(durationS);
         
         if (strlen(timestamp) > 0) this->targetSession->setStartedAt(timestamp);
 
-        String conditionsJson = "{\"temp\":" + String(temp, 1) + "}";
+        // Condiciones se completan con sensores despues
+        String conditionsJson = "{}";
         this->targetSession->setConditions(conditionsJson);
 
-        String typeJson = "{\"mode\":\"" + String(mode) + "\"}";
-        this->targetSession->setType(typeJson);
+        // Type_json recibido del cliente
+        if (strlen(typeJson) > 0) {
+            this->targetSession->setType(typeJson);
+        }
         
-        LOG_PRINTF("WS: Session configured via pointer for %s\n", dogCode);
+        LOG_PRINTLN("[SUCCESS] Sesion guardada en memoria");
+        LOG_PRINTF("  Configuration: dog=%s duration=%ds\n", dogCode, durationS);
     } else {
-        LOG_PRINTLN("WS Warning: No target session set via setTargetSession()!");
-        // Podríamos responder error 500 aquí si es crítico
+        LOG_PRINTLN("[WARNING] No target session set");
     }
 
-    // 4. Enviar Evento a la FSM
+    // Enviar evento a la maquina de estados
     Event ev;
     if (strcmp(mode, "auto") == 0) {
         ev.type = EVENT_START_AUTO_PLAY;
+        LOG_PRINTLN("[EVENT] AUTO_PLAY iniciado");
     } else {
         ev.type = EVENT_START_MANUAL_PLAY;
+        LOG_PRINTLN("[EVENT] MANUAL_PLAY iniciado");
     }
     
     xQueueSend(stateManager->getEventQueue(), &ev, 0);
     request->send(200, "application/json", "{\"status\":\"ok\"}");
+}
+
+void WebServerManager::handleApiPostCalibrate(AsyncWebServerRequest *request) {
+    LOG_PRINTLN("WS: Received /api/calibrate");
+    
+    // Enviar evento de calibración a la máquina de estados
+    Event ev;
+    ev.type = EVENT_START_CALIBRATION;
+    
+    if (stateManager != nullptr) {
+        xQueueSend(stateManager->getEventQueue(), &ev, 0);
+        request->send(200, "application/json", "{\"status\":\"ok\",\"msg\":\"Calibration started\"}");
+        LOG_PRINTLN("WS: Calibration event sent to FSM");
+    } else {
+        LOG_PRINTLN("WS Error: StateManager is null!");
+        request->send(500, "application/json", "{\"status\":\"error\",\"msg\":\"StateManager not initialized\"}");
+    }
 }

@@ -70,6 +70,40 @@ select:focus, input:focus {
     border-color: #007bff;
 }
 
+/* Checkboxes */
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: normal;
+    margin-bottom: 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.checkbox-label span {
+    font-size: 14px;
+    color: #555;
+}
+
+/* Helper text */
+small {
+    display: block;
+    margin-top: 5px;
+    font-size: 12px;
+    color: #999;
+}
+
 /* Botones de Modo (Toggle) */
 .mode-buttons {
     display: flex;
@@ -114,10 +148,82 @@ select:focus, input:focus {
 #btn-start:active { transform: scale(0.98); }
 #btn-start:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
 
+/* Botón Secundario */
+.btn-secondary {
+    width: 100%;
+    padding: 14px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+    box-shadow: 0 2px 4px rgba(108, 117, 125, 0.2);
+    transition: background 0.2s;
+}
+
+.btn-secondary:active { transform: scale(0.98); }
+.btn-secondary:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; }
+
 /* Mensajes */
 #status-msg {
     text-align: center;
     margin-top: 15px;
     font-weight: bold;
     min-height: 20px;
+}
+
+/* Overlay de Calibración */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    transition: opacity 0.3s;
+}
+
+.overlay.hidden {
+    display: none;
+}
+
+.overlay-content {
+    text-align: center;
+    color: white;
+    padding: 30px;
+    max-width: 400px;
+}
+
+.overlay-content h3 {
+    margin: 20px 0 10px 0;
+    font-size: 1.5em;
+}
+
+.overlay-content p {
+    margin: 10px 0;
+    line-height: 1.6;
+    opacity: 0.9;
+}
+
+/* Spinner de Carga */
+.spinner {
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid white;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

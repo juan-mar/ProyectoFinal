@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Configuración Lanzador</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="status-bar">
+            <span>🔋 <span id="bat-val">--</span>%</span>
+            <span>💾 <span id="sess-val">--</span> Pen.</span>
+            <span>📱 <span id="device-code">--</span></span>
+        </div>
+        <h2>🐶 Configurar Sesión</h2>
+    </header>
+
+    <!-- Overlay de Calibración/Desconexión -->
+    <div id="overlay" class="overlay hidden">
+        <div class="overlay-content">
+            <div class="spinner"></div>
+            <h3 id="overlay-title">⚙️ Calibrando Sistema</h3>
+            <p id="overlay-msg">WiFi desconectado. BLE activo.<br>La conexión se restablecerá automáticamente al terminar.</p>
+        </div>
+    </div>
+
+    <main>
+        <div class="card">
+            <label>Seleccionar Perro:</label>
+            <select id="dogSelector">
+                <option value="" disabled selected>Cargando lista...</option>
+            </select>
+        </div>
+
+        <div class="card">
+            <label>Tipo de Sustancia:</label>
+            <select id="substanceSelector">
+                <option value="">-- Selecciona una sustancia --</option>
+                <option value="explosivos">💣 Explosivos</option>
+                <option value="narcoticos">🚫 Narcóticos</option>
+                <option value="comida_organica">🥕 Comida Orgánica</option>
+                <option value="personas">👥 Personas</option>
+            </select>
+        </div>
+
+        <div class="card">
+            <label>Características del Entrenamiento:</label>
+            <div class="checkbox-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="distractorsCheckbox">
+                    <span>Con Distractores</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="card">
+            <label>Contexto de Búsqueda:</label>
+            <input type="text" id="contextInput" placeholder="Ej: Interior urbano, al aire libre, etc.">
+        </div>
+
+        <div class="card">
+            <label>Duración de Espera (segundos):</label>
+            <input type="number" id="durationInput" min="5" max="120" value="30" placeholder="5-120 segundos">
+            <small id="durationHelper">30 segundos</small>
+        </div>
+
+        <div class="card">
+            <label>Modo de Juego:</label>
+            <div class="mode-buttons">
+                <button id="btn-manual" class="mode-btn active" onclick="setMode('manual')">Manual</button>
+                <button id="btn-auto" class="mode-btn" onclick="setMode('auto')">Auto</button>
+            </div>
+        </div>
+
+        <button id="btn-start" onclick="startTraining()">INICIAR ENTRENAMIENTO</button>
+        
+        <button id="btn-calibrate" class="btn-secondary" onclick="startCalibration()">CALIBRAR SISTEMA</button>
+        
+        <p id="status-msg"></p>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

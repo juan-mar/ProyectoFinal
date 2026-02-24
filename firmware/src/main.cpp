@@ -71,8 +71,6 @@ void setup() {
         LOG_PRINTLN("Device ID not set. Saving default ID: ESP32-001");
         g_dataManager->saveDeviceID("ESP32-001");
     }
-    //g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
-
     
     // 3. Create SupabaseClient
     g_supabaseClient = new SupabaseClient(SUPABASE_URL, SUPABASE_API_KEY);
@@ -149,6 +147,10 @@ void setup() {
     LOG_PRINTLN(" 'p' -> print numero de trainings pendientes");
     LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
     LOG_PRINTLN(" 'l' -> List local dog_list.json content");
+
+    LOG_PRINTLN("\n--- Write WIFI ---");
+    LOG_PRINTLN(" 'W' -> Write WIFI in NVS");
+    
 }
 
 /****************************************************************
@@ -310,6 +312,12 @@ void loop() {
                     LOG_PRINTLN("--- End of List ---");
                 break;
 
+                case 'W': // List Dogs (Ver archivo local)
+                    LOG_PRINTLN("\n[Test] Write wifi in NVS:");
+                    g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
+                    LOG_PRINTLN("--- Saved Wifi ---");
+                break;        
+                
                 default:
                     sendEvent = false;
                     LOG_PRINTF("Simulator: Unknown command '%c'\n", command);
