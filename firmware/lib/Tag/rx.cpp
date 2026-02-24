@@ -335,7 +335,7 @@ void Receptor::stop() {
     LOG_PRINTLN("Receptor detenido");
 }
 
-void Receptor::scan() {
+int Receptor::scan() {
   // Ciclo infinito que hace la limpieza de datos
   this->clear();
 
@@ -346,12 +346,13 @@ void Receptor::scan() {
   //if (millis() - scanner.getUltimaActualizacion() > 3500) {
   //    lecturaRaw = -100; // Si no hay datos en 3.5s, asumimos lejos
   //    LOG_PRINTLN("--- Perdió señal ---");
+  //    return DETECT_FAIL;
   //}
 
   if (this->isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
     new_msg = false; // reseteamos la variable para esperar el próximo mensaje
     if (state == CALIBRATION_RX || calib) {          // si el carácter es 'c'
-      calib = this->calibracion();        // llamar a la función calibracion
+      return ((calib = this->calibracion())?CALIBRATING:CALIB_OK);        // llamar a la función calibracion
     }
     else if (state ==  DETECTION_RX || flag) {               // si el carácter es 'd' o ya se detecto la señal
       if(!flag) {
@@ -362,15 +363,18 @@ void Receptor::scan() {
       detected = this->detect_thres(); // llamar a la función detect_thres
       if (detected && now - calibStart < THRES_TIME) {
         digitalWrite(2, HIGH); // Enciende el LED
+        return DETECTING;
       } 
       else if(detected && now - calibStart >= THRES_TIME) {
         LOG_PRINTLN("Señal detectada!");
         digitalWrite(2, LOW); // Apaga el LED
         flag = false;
+        return DETECT_OK;
       }
       else {
         digitalWrite(2, LOW); // Apaga el LED
         calibStart = millis();
+        return DETECTING;
       }
     }
   }

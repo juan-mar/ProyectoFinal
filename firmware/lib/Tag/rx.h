@@ -14,6 +14,15 @@
 #define CALIBRATION_RX 1
 #define DETECTION_RX 2
 
+enum Estados {
+    CALIBRATING,
+    CALIB_OK,
+    DETECTING,
+    DETECT_OK,
+    DETECT_FAIL,
+    STOP
+};
+
 class Receptor {
     private:
     String _targetMac;
@@ -72,7 +81,7 @@ class Receptor {
     // AGREGA ESTO: Prototipo de la función stop
     void stop();
 
-    void scan(); // Método para iniciar el escaneo (puede ser llamado desde loop())
+    int scan(); // Método para iniciar el escaneo (puede ser llamado desde loop())
 
 };
 
