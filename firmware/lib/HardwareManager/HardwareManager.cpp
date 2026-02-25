@@ -449,13 +449,14 @@ void HardwareManager::checkDrivers() {
                 
                 break;
             case CALIB_OK:
+            {
                 LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
                 //SEND EVENT TO FSM IF NEEDED
                 Event ev;
                 ev.type = EVENT_CALIBRATION_COMPLETE;
                 xQueueSend(_fsmQueue, &ev, 0);
                 break;
-            
+            }            
             default:
                 break;
             }

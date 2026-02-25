@@ -24,10 +24,13 @@ void TrainingSession::setStartedAt(String isoTime)      { p_started_at = isoTime
 void TrainingSession::setConditions(String jsonString)  { p_conditions_json = jsonString; }
 void TrainingSession::setType(String jsonString)        { p_type_json = jsonString; }
 void TrainingSession::setDeviceCode(String code)        { p_device_code = code; }
+void TrainingSession::setTimeout(int seconds)           { p_timeout_s = seconds; }
 
 // --- Setters (PlayState) ---
 void TrainingSession::setDuration(int seconds) { p_duration_s = seconds; }
 void TrainingSession::setResult(String result) { p_result = result; }
+int TrainingSession::getDuration() { return p_duration_s; }
+int TrainingSession::getTimeout() { return p_timeout_s; }
 
 
 bool TrainingSession::serialize(String &outJsonString) {

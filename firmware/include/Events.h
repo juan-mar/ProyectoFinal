@@ -36,6 +36,8 @@ enum EventType {
     EVENT_PLAY_FINISHED,            // User pressed "Finish" button (manual or auto)
     EVENT_TRAINING_SUCCESS,         // Trigger reward (e.g., dispense treat) success
     EVENT_TRAINING_FAILED,          // Trigger reward failed
+    EVENT_DOG_DETECTED,             // Dog detected in range
+    EVENT_DOG_LOST,                 // Dog lost from range
 
     // --- Hardware Interrupt Events ---
     EVENT_MODE_ONLINE_ACTIVATED,    // Hardware switch moved to ONLINE

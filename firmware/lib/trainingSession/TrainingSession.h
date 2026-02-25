@@ -40,7 +40,10 @@ public:
 
     // --- Setters (Usados por los estados de Play) ---
     void setDuration(int seconds);
+    void setTimeout(int seconds);
     void setResult(String result); // e.g., "success", "fail"
+    int getDuration();
+    int getTimeout();
 
     /**
      * @brief Serializes the entire session object into a JSON string,
@@ -55,6 +58,7 @@ private:
     String p_dog_code;          //id del can
     String p_started_at;        //horario preveniente del telefono del usuario
     int    p_duration_s;        //delay del entrenamiento en segundos
+    int   p_timeout_s;         //timeout global del juego (opcional, se puede calcular como duration + tolerancia)      
     String p_result;            //e.g., "success", "fail"
     String p_conditions_json;   // Almacenamos como strings, lo carga el driver del BME280
     String p_type_json;         // Almacenamos como strings, explosivos, narcoticos, etc.
