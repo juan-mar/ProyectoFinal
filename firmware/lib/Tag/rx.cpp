@@ -1,42 +1,31 @@
 #include "rx.h"
-#include "filtro.h"
+#include "Filtro.h"
 #include "Config.h"
 
 
-/************************** DEFINICIONES ****************************/
+/****************************************** DEFINICIONES *********************************************/
 #define CAL_SAMPLES 50
 
-/*********************** VARIABLES GLOBALES *************************/
-static float rssi_filtered;
+/*************************************** VARIABLES GLOBALES *****************************************/
 static float samples[CAL_SAMPLES];
 static bool in_thres = false;
 
 static bool calibrating = false;
-static bool detecting = false;
-static unsigned long lastSampleTime = 0;
-
 
 static long sumRSSI = 0;
-static long sumSqRSSI = 0;
 static int sampleCount = 0;
-static float sum_var = 0;
-
-const int umbral = -60;
-int promedio = -100;
 
 bool calib = false;
 bool detected = false;
 bool flag = false;
 unsigned long calibStart;
 
+// Instancia global del filtro
+static Filtro filtro_kalman;  
 
-static Filtro filtro_kalman;  // Instancia global del filtro
 
 
-
-/************************** CALLBACKS DE ESCANEO ******************************/
-// Puntero auxiliar para conectar los callbacks estáticos con el objeto
-Receptor* globalReceptorRef = nullptr;
+/*********************************** CALLBACKS DE ESCANEO ***********************************************/
 
 // CALLBACK 1: Detecta el dispositivo y actualiza la variable 
 class FiltradoRapidoCallback: public BLEAdvertisedDeviceCallbacks {
@@ -48,33 +37,23 @@ public:
         _macBuscada = mac;
     }
     
-    // 1. AGREGA EL ASTERISCO (*) AQUÍ:
     void onResult(BLEAdvertisedDevice* advertisedDevice) {     
         unsigned long now = millis();
         
-        // 2. CAMBIA EL PUNTO (.) POR LA FLECHA (->) AQUÍ:
         String mac = advertisedDevice->getAddress().toString().c_str();    
         mac.toUpperCase();
         
         if (mac == _macBuscada) {
-//           LOG_PRINTLN("Dispositivo detectado");  
-            _ref->setNewMsg(true);   
-            //LOG_PRINTLN("New Msg: " + String(_ref->isNewMsg()));
+          //LOG_PRINTLN("Dispositivo detectado");  
+          _ref->setNewMsg(true);   
+          //LOG_PRINTLN("New Msg: " + String(_ref->isNewMsg()));
             
-            calibrating = true;
+          calibrating = true;
             
-            // 3. CAMBIA EL PUNTO (.) POR LA FLECHA (->) AQUÍ TAMBIÉN:
-            _ref->_procesarDato(advertisedDevice->getRSSI());
+          _ref->_procesarDato(advertisedDevice->getRSSI());
         }
     }
 };
-
-// CALLBACK 2: Limpiador de Memoria. Limpiamos la memoria para que no se llene con los dispositivos que se van encontrando
-void scanCompleteCB(BLEScanResults results) {
-    if (globalReceptorRef != nullptr) {
-        globalReceptorRef->_reiniciarEscaneo();
-    }
-}
 
 /*************************** CLASE RECEPTOR **********************************/
 
@@ -86,9 +65,6 @@ Receptor::Receptor(String targetMac) {
     _targetMac = targetMac;
     _targetMac.toUpperCase();
     rssiActual = -100;            // Valor inicial lejos
-    ultimaActualizacion = 0;
-    _escaneando = false;
-    globalReceptorRef = this;     // Enganchamos el puntero global
     new_msg = false;
     state = 0;
 }
@@ -106,15 +82,13 @@ void Receptor::init() {
       _pBLEScan->setAdvertisedDeviceCallbacks(_pCallbacks, true);
     } 
     
-    // --- AGREGA ESTAS LÍNEAS PARA MÁXIMA VELOCIDAD ---
-    
+    // --- LÍNEAS PARA MÁXIMA VELOCIDAD ---
     // Configura la antena para escuchar casi el 100% del tiempo
     // Los valores están en incrementos de 0.625ms (100 = 62.5ms)
     _pBLEScan->setInterval(100); 
     _pBLEScan->setWindow(99);    // Ventana casi igual al intervalo (99% Duty Cycle)
     
-    // Escaneo activo: El ESP32 le pide amablemente al dispositivo 
-    // que le responda más rápido si lo escucha.
+    // Escaneo activo: El ESP32 le pide al dispositivo que le responda más rápido si lo escucha.
     _pBLEScan->setActiveScan(true);
 
     // Escaneo infinito
@@ -127,13 +101,9 @@ void Receptor::init() {
 void Receptor::_procesarDato(int rssi) {
     rssiActual = rssi; 
     rssi_filtered = filtro_kalman.filtrado(rssiActual);
-    ultimaActualizacion = millis();
-    //new_msg = false;
 }
 
 bool Receptor::calibracion() {
-  //calibrating = true;
-
   // Es momento de tomar una nueva muestra?
   if (calibrating && (sampleCount < CAL_SAMPLES))
   {
@@ -147,14 +117,12 @@ bool Receptor::calibracion() {
     sumRSSI += rssi_calib;
     samples[sampleCount - 1] = rssi_calib;
 
-    
-    return true;
+    return true; // calibración en progreso
   }
   else if (sampleCount >= CAL_SAMPLES) {
     LOG_PRINTLN("Fin calibracion");
     LOG_PRINT("Sample Count: ");
     LOG_PRINTLN(sampleCount);
-    //calibrating = false;
 
     if (sampleCount > 0) {
       // Calculamos el promedio (Threshold)
@@ -191,7 +159,7 @@ bool Receptor::calibracion() {
 
     sumRSSI = 0;
     sampleCount = 0;
-    return false; 
+    return false; // calibración finalizada
   }
   else {
     return true; // calibración en progreso
@@ -199,53 +167,35 @@ bool Receptor::calibracion() {
 }
 
 bool Receptor::detect_thres() {
-  detecting = true;
-  //LOG_PRINTLN("RSSI Actual: " + String(rssiActual) + " | RSSI Filtrado: " + String(rssi_filtered));
   int rssi_curr = rssi_filtered;
-  if (rssi_curr > this->threshold) { // señal dentro del umbral
+
+  // señal dentro del umbral
+  if (rssi_curr > this->threshold) { 
     in_thres = true;
     return true; 
   } 
-  else if (rssi_curr < barrier) { // señal muy lejos
+
+  // señal muy lejos
+  else if (rssi_curr < barrier) { 
     in_thres = false;
     return false; 
-    detecting = false;
   } 
-  else if (in_thres && rssi_curr > barrier) { // señal detectada con tolerancia
+
+  // señal detectada con tolerancia
+  else if (in_thres && rssi_curr > barrier) { 
     return true; 
   }
+
+  // señal no detectada
   else {
-    return false; // señal no detectada
-    detecting = false;
+    return false; 
   }
-}
-
-void Receptor::_reiniciarEscaneo() {
-    _escaneando = false; // El loop() se encarga de arrancar de nuevo
-}
-
-void Receptor::clear() {
-    // Si el sistema se desactivó, salimos inmediatamente
-    if (!_sistemaActivo) return; 
-
-    if (millis() - _tiempoUltimoReinicio > 5000) {
-        //Verificamos si el puntero sigue siendo válido
-        if(_pBLEScan == nullptr) return; 
-
-        _pBLEScan->stop();
-        _pBLEScan->clearResults();
-        _pBLEScan->start(0, nullptr, false);
-        _tiempoUltimoReinicio = millis();
-    }
 }
 
 int Receptor::getRSSI() {
     return rssiActual;
 }
 
-long Receptor::getUltimaActualizacion() {
-    return ultimaActualizacion;
-}
 
 void Receptor::setNewMsg(bool val) {
     new_msg = val;
@@ -281,31 +231,21 @@ void Receptor::stop() {
     
     // 3. Bloquear reinicios futuros
     _sistemaActivo = false;
-    _escaneando = false;
-    
+
     LOG_PRINTLN("Receptor detenido");
 }
 
 int Receptor::scan() {
-  // Ciclo infinito que hace la limpieza de datos
-  this->clear();
 
   // Leemos la variable global directamente
   int lecturaRaw = this->getRSSI();
-  //LOG_PRINTLN("Lectura RSSI: " + String(lecturaRaw));
-  // Seguridad por si se apaga el dispositivo
-  //if (millis() - scanner.getUltimaActualizacion() > 3500) {
-  //    lecturaRaw = -100; // Si no hay datos en 3.5s, asumimos lejos
-  //    LOG_PRINTLN("--- Perdió señal ---");
-  //    return DETECT_FAIL;
-  //}
 
   if (this->isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
     new_msg = false; // reseteamos la variable para esperar el próximo mensaje
-    if (state == CALIBRATION_RX || calib) {          // si el carácter es 'c'
+    if (state == CALIBRATION_RX || calib) {          // si estamos en estado de calibracion
       return ((calib = this->calibracion())?CALIBRATING:CALIB_OK);        // llamar a la función calibracion
     }
-    else if (state ==  DETECTION_RX || flag) {               // si el carácter es 'd' o ya se detecto la señal
+    else if (state ==  DETECTION_RX || flag) {               // si estamos en estado de deteccion
       if(!flag) {
       calibStart = millis();
       }
@@ -329,4 +269,5 @@ int Receptor::scan() {
       }
     }
   }
+  return IDLE; // Si no hay datos nuevos, retornamos IDLE
 }

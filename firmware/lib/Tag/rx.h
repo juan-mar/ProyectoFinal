@@ -2,10 +2,6 @@
 #define RX_H
 
 #include <Arduino.h>
-//#include <BLEDevice.h>
-//#include <BLEUtils.h>
-//#include <BLEScan.h>
-//#include <BLEAdvertisedDevice.h>
 
 #include <NimBLEDevice.h>
 
@@ -20,14 +16,14 @@ enum Estados {
     DETECTING,
     DETECT_OK,
     DETECT_FAIL,
-    STOP
+    STOP,
+    IDLE
 };
 
 class Receptor {
     private:
     String _targetMac;
     BLEScan* _pBLEScan;
-    bool _escaneando;
 
     float threshold;
     float varianza;
@@ -36,8 +32,7 @@ class Receptor {
 
     // Guarda el ultimo valor de RSSI
     volatile int rssiActual;
-    // Para saber si está vivo o se perdió la señal
-    volatile unsigned long ultimaActualizacion; 
+    volatile float rssi_filtered;
 
     unsigned long _tiempoUltimoReinicio;
 
@@ -56,29 +51,27 @@ class Receptor {
     Receptor(String targetMac);
 
     //Inicialización de los callbacks
-    void init();
-    
-    // Esta función mantiene el ciclo infinito rodando
-    void clear(); 
+    void init(); 
 
-    // Funcion de calibracion
+    /* Funcion de calibracion
+    true: calibracion en progreso
+    false: calibracion finalizada */
     bool calibracion();
 
     // Función de detección de umbral
     bool detect_thres();
 
-    // Métodos internos (públicos por simplicidad técnica)
+    /* Funcion de procesamiento de datos
+    Registra el valor crudo de rssi en rssiActual
+    Utiliza funcion de filtrado y registra el valor en rssi_filtered*/
     void _procesarDato(int rssi);
-    void _reiniciarEscaneo();
 
     int getRSSI();
-
-    long getUltimaActualizacion(); 
 
     void setNewMsg(bool val);
     bool isNewMsg();
 
-    // AGREGA ESTO: Prototipo de la función stop
+    //Prototipo de la función stop
     void stop();
 
     int scan(); // Método para iniciar el escaneo (puede ser llamado desde loop())
