@@ -1,4 +1,5 @@
 #include "rx.h"
+#include "filtro.h"
 #include "Config.h"
 
 
@@ -27,56 +28,6 @@ bool calib = false;
 bool detected = false;
 bool flag = false;
 unsigned long calibStart;
-
-/************************* CLASE FILTRO ******************************/
-class Filtro {
-  private:
-    float x_est;
-    float P_est;
-    float varianzaR;
-    float varianzaQ;
-
-    //Funciones privadas
-    float filtroKalman(float nuevaMuestra){
-        float R = varianzaR;
-        float Q = varianzaQ;
-        
-        float x_pred = x_est;
-        float P_pred = P_est + Q;
-
-        // Ganancia de Kalman
-        float K = P_pred / (P_pred + R);
-
-        // Actualización
-        x_est = x_pred + K * (nuevaMuestra - x_pred);
-        P_est = (1 - K) * P_pred;
-
-        return x_est;
-    }
-
-  public:
-    Filtro(){ // Constructor
-        x_est = -50;
-        P_est = 100;
-        varianzaR = 0.1;
-        varianzaQ = 0.5;
-    } 
-
-    ~Filtro(){
-      // Destructor
-    }
-
-    void set_varianzaR(float var){
-      varianzaR = var;
-    }
-    void set_varianzaQ(float var){
-      varianzaQ = var;
-    }
-    
-    void filtrado(float nuevaMuestra){
-      rssi_filtered = filtroKalman(nuevaMuestra);
-    }
-};
 
 
 static Filtro filtro_kalman;  // Instancia global del filtro
@@ -175,7 +126,7 @@ void Receptor::init() {
 // Procesa un nuevo dato RSSI recibido y lo manda a filtrar
 void Receptor::_procesarDato(int rssi) {
     rssiActual = rssi; 
-    filtro_kalman.filtrado(rssiActual);
+    rssi_filtered = filtro_kalman.filtrado(rssiActual);
     ultimaActualizacion = millis();
     //new_msg = false;
 }
