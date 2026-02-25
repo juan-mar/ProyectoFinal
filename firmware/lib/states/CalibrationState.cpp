@@ -36,7 +36,8 @@
  ****************************************************************/
 
 CalibrationState::CalibrationState(DataManager* dataManager, HardwareManager* hardwareManager) 
-    : dataManager(dataManager), hardwareManager(hardwareManager) 
+    : dataManager(dataManager), hardwareManager(hardwareManager), timeoutTriggered(false),
+    changingState(false)
 {}
 
 void CalibrationState::enter(StateManager* manager) {
@@ -55,8 +56,9 @@ void CalibrationState::execute(StateManager* manager) {
     if (xQueueReceive(queue, &event, CALIBRATION_STATE_TICK_MS / portTICK_PERIOD_MS) == pdTRUE) {
         handleEvent(manager, event);
     }
-
-    update(manager);
+    if (!changingState) {
+        update(manager);
+    }   
 }
 
 void CalibrationState::exit(StateManager* manager) {
@@ -75,16 +77,19 @@ void CalibrationState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_CALIBRATION_COMPLETE:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Complete. Returning to ConfigState.");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            changingState = true;
             break;
 
         case EVENT_CALIBRATION_CANCEL:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Cancelled. Returning to ConfigState.");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            changingState = true;
             break;
 
         case EVENT_CALIBRATION_FAILED:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Failed. Returning to ConfigState.");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            changingState = true;
             break;
         
         default:
@@ -99,6 +104,7 @@ void CalibrationState::update(StateManager* manager) {
     unsigned long elapsedTime = millis() - calibrationStartTime;
     
     if (elapsedTime >= CALIBRATION_TIMEOUT_MS) {
+        timeoutTriggered = true;
         LOG_PRINTLN("[CalibrationState] Calibration timeout! No completion within time limit.");
         Event timeoutEvent;
         timeoutEvent.type = EVENT_CALIBRATION_FAILED;

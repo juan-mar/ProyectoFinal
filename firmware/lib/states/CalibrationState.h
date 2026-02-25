@@ -44,6 +44,8 @@ private:
     DataManager* dataManager;       
     HardwareManager* hardwareManager;
     unsigned long calibrationStartTime;  // Time when calibration started (ms)
+    bool timeoutTriggered;
+    bool changingState; // Flag to indicate if we should transition on successful calibration
 };
 
 #endif // CALIBRATION_STATE_H

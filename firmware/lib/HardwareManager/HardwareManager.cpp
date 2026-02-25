@@ -443,8 +443,22 @@ void HardwareManager::checkDrivers() {
     }
     // Nota: El BLE no se chequea aquí porque corre en su propia Task y manda eventos directo
     if(_peripheralState.bleEnabled){
-        _bleScanner.scan();
-        
+        switch(_bleScanner.scan()){
+            case CALIBRATING:
+                //LOG_PRINTLN("[HW] BLE Scanner: CALIBRATING");
+                
+                break;
+            case CALIB_OK:
+                LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
+                //SEND EVENT TO FSM IF NEEDED
+                Event ev;
+                ev.type = EVENT_CALIBRATION_COMPLETE;
+                xQueueSend(_fsmQueue, &ev, 0);
+                break;
+            
+            default:
+                break;
+            }
     }
 }
 

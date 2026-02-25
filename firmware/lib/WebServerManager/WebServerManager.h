@@ -58,8 +58,8 @@ private:
     TrainingSession* targetSession;
 
     // --- Network Objects ---
-    AsyncWebServer server;
-    DNSServer dnsServer;
+    AsyncWebServer* server = nullptr;
+    DNSServer* dnsServer = nullptr;
 
     // --- Configuration ---
     const char* AP_SSID = "Lanzador_Config";

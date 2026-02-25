@@ -12,7 +12,7 @@
 
 // --- Constructor ---
 WebServerManager::WebServerManager() 
-    : dataManager(nullptr), stateManager(nullptr), server(80)
+    : dataManager(nullptr), stateManager(nullptr), server(nullptr), dnsServer(nullptr)
 {
     // Nothing else to init here
 }
@@ -22,39 +22,55 @@ void WebServerManager::begin() {
     LOG_PRINTLN("[WEB] Starting services...");
 
     // 1. WiFi AP
+    WiFi.mode(WIFI_AP); // Aseguramos el modo correcto antes de configurar
     IPAddress apIP(192, 168, 4, 1);
     WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
     WiFi.softAP(AP_SSID);
-    LOG_PRINT("[WEB] AP IP Address: ");
-    LOG_PRINTLN(WiFi.softAPIP());
 
-    // 2. DNS (Captive Portal)
-    dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-    LOG_PRINTLN("[WEB] DNS Captive Portal started");
+    // 2. DNS (Recreación limpia)
+    if (dnsServer != nullptr) { delete dnsServer; }
+    dnsServer = new DNSServer();
+    dnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
 
-    // 3. Web Server
-    if (!routesConfigured) {
-        dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
-        setupRoutes();
-        server.begin();
-        routesConfigured = true;
-    }
+    // 3. Web Server (Recreación limpia)
+    if (server != nullptr) { delete server; }
+    server = new AsyncWebServer(80);
+    setupRoutes();  // Ahora configuramos las rutas SIEMPRE
+    server->begin();
 
-    LOG_PRINTLN("[WEB] HTTP Server started");
+    LOG_PRINTLN("[WEB] HTTP & DNS Servers started dynamically");
     LOG_PRINTF("[WEB] SSID: %s\n", AP_SSID);
-    LOG_PRINTLN("[WEB] Open browser and go to http://192.168.4.1");
 }
 
 void WebServerManager::stop() {
-    //dnsServer.stop();
-    //server.end();
+    LOG_PRINTLN("WS: Pausing services...");
     vTaskDelay(pdMS_TO_TICKS(500));
+
+    // Destruir DNS
+    if (dnsServer != nullptr) {
+        dnsServer->stop();
+        delete dnsServer;
+        dnsServer = nullptr;
+    }
+    vTaskDelay(pdMS_TO_TICKS(1500));
+
+    // Destruir Web Server HTTP
+    if (server != nullptr) {
+        server->end();
+        delete server;
+        server = nullptr;
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+    
     WiFi.softAPdisconnect(true);
-    LOG_PRINTLN("WS: Services stopped.");
+    WiFi.mode(WIFI_OFF);
+    LOG_PRINTLN("WS: Services stopped and memory freed.");
 }
 
 void WebServerManager::update() {
-    dnsServer.processNextRequest();
+    if (dnsServer != nullptr) {
+        dnsServer->processNextRequest();
+    }
 }
 
 void WebServerManager::setTargetSession(TrainingSession* session) {
@@ -75,15 +91,15 @@ void WebServerManager::setupRoutes() {
     // ==========================================
     // 1. API ROUTES PRIMERO (Para evitar logs de error)
     // ==========================================
-    server.on("/api/dogs", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    server->on("/api/dogs", HTTP_GET, [this](AsyncWebServerRequest *request) {
         this->handleApiGetDogs(request);
     });
 
-    server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
         this->handleApiGetStatus(request);
     });
 
-    server.on("/api/start", HTTP_POST, 
+    server->on("/api/start", HTTP_POST, 
         [](AsyncWebServerRequest *request){ }, 
         NULL,
         [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
@@ -91,7 +107,7 @@ void WebServerManager::setupRoutes() {
         }
     );
 
-    server.on("/api/calibrate", HTTP_POST, [this](AsyncWebServerRequest *request) {
+    server->on("/api/calibrate", HTTP_POST, [this](AsyncWebServerRequest *request) {
         this->handleApiPostCalibrate(request);
     });
 
@@ -102,20 +118,20 @@ void WebServerManager::setupRoutes() {
         request->redirect("http://192.168.4.1/");
     };
 
-    server.on("/generate_204", HTTP_ANY, captivePortalRedirect);        // Android
-    server.on("/hotspot-detect.html", HTTP_ANY, captivePortalRedirect); // iOS / Apple
-    server.on("/fwlink", HTTP_ANY, captivePortalRedirect);              // Windows
+    server->on("/generate_204", HTTP_ANY, captivePortalRedirect);        // Android
+    server->on("/hotspot-detect.html", HTTP_ANY, captivePortalRedirect); // iOS / Apple
+    server->on("/fwlink", HTTP_ANY, captivePortalRedirect);              // Windows
 
     // ==========================================
     // 3. ARCHIVOS ESTÁTICOS 
     // ==========================================
     // Ahora, si no es una API ni una trampa, buscará en LittleFS
-    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+    server->serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
 
     // ==========================================
     // 4. PORTAL CAUTIVO AUTOMÁTICO (onNotFound)
     // ==========================================
-    server.onNotFound([](AsyncWebServerRequest *request) {
+    server->onNotFound([](AsyncWebServerRequest *request) {
         String host = request->host();
         
         // Si el usuario ya está en nuestra IP pero pidió algo que no existe, enviamos 404 real.
