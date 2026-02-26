@@ -18,9 +18,8 @@
 // States we can transition to
 #include "SyncState.h"
 #include "CalibrationState.h"
-
 // #include "ManualPlayState.h"
-// #include "AutoPlayState.h"
+#include "AutoPlayState.h"
 
 /****************************************************************
  * Defines and Constants
@@ -36,11 +35,12 @@
  ****************************************************************/
 
 ConfigState::ConfigState(DataManager* dataManager, WebServerManager* webServer) 
-    : dataManager(dataManager), webServer(webServer) 
+    : dataManager(dataManager), webServer(webServer),changingState(false) 
 {}
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
+    changingState = false;
     this->sessionConfig = new TrainingSession();
     
     //TODO: Set LEDs as IDLE OFFLINE-CONFIG
@@ -57,8 +57,9 @@ void ConfigState::execute(StateManager* manager) {
     if (xQueueReceive(queue, &event, CONFIG_STATE_TICK_MS / portTICK_PERIOD_MS) == pdTRUE) {
         handleEvent(manager, event);
     }
-
-    update(manager);
+    if(!changingState) {
+        update(manager);
+    }
 }
 
 void ConfigState::exit(StateManager* manager) {
@@ -68,9 +69,8 @@ void ConfigState::exit(StateManager* manager) {
         this->sessionConfig = nullptr;
         LOG_PRINTLN("ConfigState: Unused session config deleted.");
     }
- 
-    webServer->setTargetSession(nullptr);
     webServer->stop();
+    webServer->setTargetSession(nullptr);  
 }
 
 /****************************************************************
@@ -81,27 +81,33 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
+            changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
 
         case EVENT_START_CALIBRATION:
             LOG_PRINTLN("[ConfigState] Event: Start Calibration. Changing to CalibrationState.");
             this->sessionConfig = nullptr;
+            changingState = true;
             manager->changeState(new CalibrationState(dataManager, manager->getHardwareManager()));
             break;
 
         case EVENT_START_MANUAL_PLAY:
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
+            changingState = true;
             // manager->changeState(new ManualPlayState(dataManager,trainingSession));
             this->sessionConfig = nullptr;
             break;
 
         case EVENT_START_AUTO_PLAY:
+        {
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
-            // manager->changeState(new AutoPlayState(dataManager,trainingSession));
-            this->sessionConfig = nullptr;
+            changingState = true;
+            TrainingSession* sessionToPass = this->sessionConfig;            
+            this->sessionConfig = nullptr; 
+            manager->changeState(new AutoPlayState(dataManager, sessionToPass));
             break;
-        
+        }
         default:
             break;
     }

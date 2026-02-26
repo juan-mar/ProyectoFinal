@@ -105,7 +105,7 @@ public:
         mac.toUpperCase();
         
         if (mac == _macBuscada) {
-            //Serial.println("Dispositivo detectado");  
+            Serial.println("Dispositivo detectado");  
             _ref->setNewMsg(true);   
             
             calibrating = true;

@@ -90,12 +90,21 @@ bool SupabaseClient::listDogs(String accessToken, String &outJsonString) {
 bool SupabaseClient::recordTrainingBatch(String accessToken, String batchJsonString) {
     String url = supabaseUrl + "/rest/v1/rpc/record_training_batch";
 
+    LOG_PRINTLN("\n--- ENVIANDO A SUPABASE ---");
+    LOG_PRINTLN(batchJsonString);
+    LOG_PRINTLN("---------------------------");
+
     http.begin(url);
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + accessToken);
     http.addHeader("Content-Type", "application/json");
 
+    String response = http.getString(); 
     int httpCode = http.POST(batchJsonString);
+
+    LOG_PRINTF("[Supabase] HTTP Code:");
+    LOG_PRINTLN(httpCode);
+    LOG_PRINTLN("[Supabase] Respuesta del Servidor: " + response);
     bool success = false;
     
     // Para RPC de batch, 200 (OK) o 204 (No Content) son éxito

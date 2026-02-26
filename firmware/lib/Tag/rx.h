@@ -13,68 +13,68 @@
 enum Estados {
     CALIBRATING,
     CALIB_OK,
-    DETECTING,
-    DETECT_OK,
-    DETECT_FAIL,
+    DETECT_OK,      //Entró a zona
+    DETECT_FAIL,    //Salió de zona
     STOP,
     IDLE
 };
 
 class Receptor {
     private:
-    String _targetMac;
-    BLEScan* _pBLEScan;
+        String _targetMac;
+        BLEScan* _pBLEScan;
 
-    float threshold;
-    float varianza;
-    int barrier;
-    bool new_msg;
+        float threshold;
+        float varianza;
+        int barrier;
+        bool new_msg;
 
-    // Guarda el ultimo valor de RSSI
-    volatile int rssiActual;
-    volatile float rssi_filtered;
+        // Guarda el ultimo valor de RSSI
+        volatile int rssiActual;
+        volatile float rssi_filtered;
 
-    unsigned long _tiempoUltimoReinicio;
+        unsigned long _tiempoUltimoReinicio;
 
-    // AGREGA ESTO: Puntero para controlar el callback
-    BLEAdvertisedDeviceCallbacks* _pCallbacks = nullptr; 
-    
-    // AGREGA ESTO: Bandera para controlar si el sistema debe seguir funcionando
-    bool _sistemaActivo = false;
+        // AGREGA ESTO: Puntero para controlar el callback
+        BLEAdvertisedDeviceCallbacks* _pCallbacks = nullptr; 
+        
+        // AGREGA ESTO: Bandera para controlar si el sistema debe seguir funcionando
+        bool _sistemaActivo = false;
+        bool _prevStateDetected;
 
 
     public:
 
-    int state;  
+        int state;  
 
-    //Constructor. Recibe la MAC address del transmisor
-    Receptor(String targetMac);
+        //Constructor. Recibe la MAC address del transmisor
+        Receptor(String targetMac);
 
-    //Inicialización de los callbacks
-    void init(); 
+        //Inicialización de los callbacks
+        void init(); 
 
-    /* Funcion de calibracion
-    true: calibracion en progreso
-    false: calibracion finalizada */
-    bool calibracion();
+        /* Funcion de calibracion
+        true: calibracion en progreso
+        false: calibracion finalizada */
+        bool calibracion();
 
-    // Función de detección de umbral
-    bool detect_thres();
+        // Función de detección de umbral
+        bool detect_thres();
 
-    /* Funcion de procesamiento de datos
-    Registra el valor crudo de rssi en rssiActual
-    Utiliza funcion de filtrado y registra el valor en rssi_filtered*/
-    void _procesarDato(int rssi);
+        /* Funcion de procesamiento de datos
+        Registra el valor crudo de rssi en rssiActual
+        Utiliza funcion de filtrado y registra el valor en rssi_filtered*/
+        void _procesarDato(int rssi);
 
-    int getRSSI();
+        int getRSSI();
 
-    void setNewMsg(bool val);
-    bool isNewMsg();
+        void setNewMsg(bool val);
+        bool isNewMsg();
 
-    //Prototipo de la función stop
-    void stop();
+        //Prototipo de la función stop
+        void stop();
 
-    int scan(); // Método para iniciar el escaneo (puede ser llamado desde loop())
+        int scan(); // Método para iniciar el escaneo (puede ser llamado desde loop())
 
 };
 

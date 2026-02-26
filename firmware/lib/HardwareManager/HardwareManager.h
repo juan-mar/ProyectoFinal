@@ -22,8 +22,8 @@ enum HwCmdType {
     // --- TAG / RFID Control ---
     CMD_TAG_POWER_ON,               // Encender TAG (lector RFID)
     CMD_TAG_POWER_OFF,              // Apagar TAG (ahorrar energía)
-    CMD_TAG_CALIBRATION_MODE,       // Entrar modo calibración
-    CMD_TAG_DETECTION_MODE,         // Entrar modo detección normal
+    //CMD_TAG_CALIBRATION_MODE,       // Entrar modo calibración
+    //CMD_TAG_DETECTION_MODE,         // Entrar modo detección normal
     
     // --- Remote Control (NRF24) ---
     CMD_REMOTE_POWER_ON,            // Encender receptor NRF24
@@ -45,8 +45,8 @@ enum HwCmdType {
     CMD_LAUNCHER_FIRE,              // Disparar pelota (envía pulso)
     
     // --- Gestión de Energía / Drivers ---
-    CMD_ENABLE_BLE,                 // Iniciar escaneo BLE
-    CMD_DISABLE_BLE                 // Detener escaneo BLE
+    //CMD_ENABLE_BLE,                 // Iniciar escaneo BLE
+    //CMD_DISABLE_BLE                 // Detener escaneo BLE
 };
 
 #define CMD_TAG_PARAM_CALIBRATION   1
@@ -112,9 +112,7 @@ private:
     // --- Estado de Periféricos ---
     struct PeripheralState {
         bool tagEnabled;            // TAG/RFID reader on/off
-        bool tagCalibrationMode;    // true = calibración, false = detección
         bool remoteEnabled;         // Remote NRF24 on/off
-        bool bleEnabled;            // BLE scanner on/off
     } _peripheralState;
 
     // --- Estado de Actuadores ---

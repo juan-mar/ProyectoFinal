@@ -15,7 +15,7 @@ void setup() {
 
 void loop() {
   // Ciclo infinito que hace la limpieza de datos
-  scanner.scan();
+  scanner.scan(0);
 }
 
 

@@ -5,6 +5,8 @@
 
 /****************************************** DEFINICIONES *********************************************/
 #define CAL_SAMPLES 50
+#define NOT_DETECTED 0
+#define DETECTED 1
 
 /*************************************** VARIABLES GLOBALES *****************************************/
 static float samples[CAL_SAMPLES];
@@ -17,8 +19,7 @@ static int sampleCount = 0;
 
 bool calib = false;
 bool detected = false;
-bool flag = false;
-unsigned long calibStart;
+unsigned long timerDetec;
 
 // Instancia global del filtro
 static Filtro filtro_kalman;  
@@ -67,6 +68,7 @@ Receptor::Receptor(String targetMac) {
     rssiActual = -100;            // Valor inicial lejos
     new_msg = false;
     state = 0;
+    _prevStateDetected = NOT_DETECTED;
 }
 
 
@@ -94,6 +96,8 @@ void Receptor::init() {
     // Escaneo infinito
     _sistemaActivo = true; // Marcamos el sistema como activo
     _pBLEScan->start(0, nullptr, false);
+	_prevStateDetected = NOT_DETECTED; // Inicialmente no detectado
+
 }
 
 
@@ -238,36 +242,37 @@ void Receptor::stop() {
 int Receptor::scan() {
 
   // Leemos la variable global directamente
-  int lecturaRaw = this->getRSSI();
+  	int lecturaRaw = this->getRSSI();
 
-  if (this->isNewMsg() || calib || flag) { // si hay datos disponibles en el puerto serie
-    new_msg = false; // reseteamos la variable para esperar el próximo mensaje
-    if (state == CALIBRATION_RX || calib) {          // si estamos en estado de calibracion
-      return ((calib = this->calibracion())?CALIBRATING:CALIB_OK);        // llamar a la función calibracion
+	if (this->isNewMsg() || calib) { // si hay datos disponibles en el puerto serie
+		new_msg = false; // reseteamos la variable para esperar el próximo mensaje
+		if (state == CALIBRATION_RX || calib) {          // si estamos en estado de calibracion
+			return ((calib = this->calibracion())?CALIBRATING:CALIB_OK);        // llamar a la función calibracion
+		}
+		else if (state ==  DETECTION_RX) {               // si estamos en estado de deteccion
+			if(detect_thres()){
+				if(_prevStateDetected == DETECTED) {
+					//Nada - esta adentro y antes tambien
+					return IDLE;
+				}
+				else{
+					//ENTRO PERRO - Avisamos a FSM
+					_prevStateDetected = DETECTED;
+					return DETECT_OK;
+				} 
+			}
+			else{
+				if(_prevStateDetected == DETECTED) {
+					//SE FUE EL PERRO - return Detect_fail
+					_prevStateDetected = NOT_DETECTED;
+					return DETECT_FAIL;
+				}
+				else{
+					//Nada - estaba afuera y sigue afuera
+					return IDLE;
+				}
+			} 
+		}    
     }
-    else if (state ==  DETECTION_RX || flag) {               // si estamos en estado de deteccion
-      if(!flag) {
-      calibStart = millis();
-      }
-      flag = true;
-      unsigned long now = millis();
-      detected = this->detect_thres(); // llamar a la función detect_thres
-      if (detected && now - calibStart < THRES_TIME) {
-        digitalWrite(2, HIGH); // Enciende el LED
-        return DETECTING;
-      } 
-      else if(detected && now - calibStart >= THRES_TIME) {
-        LOG_PRINTLN("Señal detectada!");
-        digitalWrite(2, LOW); // Apaga el LED
-        flag = false;
-        return DETECT_OK;
-      }
-      else {
-        digitalWrite(2, LOW); // Apaga el LED
-        calibStart = millis();
-        return DETECTING;
-      }
-    }
-  }
-  return IDLE; // Si no hay datos nuevos, retornamos IDLE
+  	return IDLE; // Si no hay datos nuevos, retornamos IDLE
 }

@@ -16,6 +16,7 @@
 #include "TrainingSession.h"
 #include "WebServerManager.h"
 
+
 /****************************************************************
  * Defines and Constants
  ****************************************************************/
@@ -233,11 +234,6 @@ void loop() {
                     sendEvent = false;
                     LOG_PRINTLN("[TEST] CMD_TAG_POWER_OFF sent");
                     break;
-                case 'C': // TAG Calibration
-                    g_hardwareManager->sendCommand(CMD_TAG_CALIBRATION_MODE, 0);
-                    sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_TAG_CALIBRATION_MODE sent");
-                    break;
                 case 'R': // Remote ON
                     g_hardwareManager->sendCommand(CMD_REMOTE_POWER_ON, 0);
                     sendEvent = false;
@@ -272,17 +268,6 @@ void loop() {
                     g_hardwareManager->sendCommand(CMD_LAUNCHER_FIRE, 0);
                     sendEvent = false;
                     LOG_PRINTLN("[TEST] CMD_LAUNCHER_FIRE sent");
-                    break;
-                case 'B': // BLE ON
-                    g_hardwareManager->sendCommand(CMD_ENABLE_BLE, 0);
-                    sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_ENABLE_BLE sent");
-                    break;
-                case 'b': // BLE OFF
-                    g_hardwareManager->sendCommand(CMD_DISABLE_BLE, 0);
-                    sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_DISABLE_BLE sent");
-                    break;
                     break;
                 // --- PRUEBAS DE DATOS ---
                 case 'w': // Write Session (Simular fin de juego)

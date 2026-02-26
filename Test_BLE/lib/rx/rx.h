@@ -72,7 +72,7 @@ class Receptor {
     // AGREGA ESTO: Prototipo de la función stop
     void stop();
 
-    void scan(); // Método para iniciar el escaneo (puede ser llamado desde loop())
+    void scan(int); // Método para iniciar el escaneo (puede ser llamado desde loop())
 
 };
 

@@ -64,6 +64,9 @@ void WebServerManager::stop() {
     
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
+    
+    vTaskDelay(pdMS_TO_TICKS(100)); 
+
     LOG_PRINTLN("WS: Services stopped and memory freed.");
 }
 

@@ -14,7 +14,7 @@
  ****************************************************************/
 
 TrainingSession::TrainingSession() 
-    : p_duration_s(0), p_result("unknown"){
+    : p_duration_s(0), p_result("unknown"), p_timeout_s(20){
 
 }
 

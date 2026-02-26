@@ -26,8 +26,10 @@ protected:
 private:
     DataManager* dataManager;
     TrainingSession* currentSession;
-    
+    bool changingState;  
+
     enum AutoSubState {
+        TIMEOUT_FAIL,
         WAITING_FOR_DOG,            // Esperando a que el collar entre en rango
         DOG_DETECTED_TIMING,        // Perro en rango, contando el tiempo exigido
         DISPENSING_REWARD           // Solenoide disparado, esperando confirmación

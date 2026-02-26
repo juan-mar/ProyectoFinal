@@ -13,7 +13,8 @@
  * Headers
  ****************************************************************/
 #include "State.h"
-#include <freertos/task.h> // Para TaskHandle_t
+#include <freertos/FreeRTOS.h> // Debe incluirse antes de task.h
+#include <freertos/task.h>     // Para TaskHandle_t
 
 /****************************************************************
  * Forward Declarations
