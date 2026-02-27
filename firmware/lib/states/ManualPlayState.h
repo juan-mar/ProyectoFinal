@@ -35,6 +35,7 @@ protected:
 private:
     DataManager* dataManager;
     TrainingSession* currentSession;
+    bool changingState; // Escudo para evitar manejar eventos durante la transición
     
     // Helper para guardar y limpiar
     void saveRun(const char* result);

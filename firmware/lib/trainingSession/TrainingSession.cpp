@@ -29,13 +29,15 @@ void TrainingSession::setTimeout(int seconds)           { p_timeout_s = seconds;
 // --- Setters (PlayState) ---
 void TrainingSession::setDuration(int seconds) { p_duration_s = seconds; }
 void TrainingSession::setResult(String result) { p_result = result; }
+
+// --- Getters ---
 int TrainingSession::getDuration() { return p_duration_s; }
 int TrainingSession::getTimeout() { return p_timeout_s; }
 
 
 bool TrainingSession::serialize(String &outJsonString) {
     StaticJsonDocument<512> doc;    // 512 bytes for one session 
-
+    
     // 1. Asignar valores simples
     doc["p_dog_code"] = p_dog_code;
     doc["p_started_at"] = p_started_at;

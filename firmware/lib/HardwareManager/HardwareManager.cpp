@@ -1,5 +1,7 @@
 #include "HardwareManager.h"
 #include "Config.h"
+#include <driver/uart.h>
+#include <hal/uart_types.h> 
 
 HardwareManager::HardwareManager() 
     : _lastSensorCheck(0), _bleScanner(MAC_ADDR) {
@@ -389,12 +391,22 @@ Event HardwareManager::enterLightSleep() {
     int currentState = digitalRead(PIN_MODE_SWITCH);
     gpio_int_type_t wakeupLevel = (currentState == HIGH) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL;
 
+    
+
     // API específica de ESP32
     gpio_wakeup_enable((gpio_num_t)PIN_MODE_SWITCH, wakeupLevel);
     esp_sleep_enable_gpio_wakeup();
 
     LOG_PRINTLN("HW: Entering Light Sleep...");
     LOG_FLUSH(); // Vaciar buffer serial antes de cortar reloj
+
+    #ifdef DEBUG_MODE  // Asumiendo que tienes un #define DEBUG_MODE en tu config.h
+    LOG_PRINTLN("[HW] Configuracion WakeUp por UART (Monitor Serie) activada.");
+    
+    // Le decimos que despierte si recibe al menos 3 caracteres (ej: apretar 'c' + Enter)
+    uart_set_wakeup_threshold(0, 3); 
+    esp_sleep_enable_uart_wakeup(0);
+    #endif
 
     // 2. DORMIR (El procesador se detiene aquí)
     esp_light_sleep_start();

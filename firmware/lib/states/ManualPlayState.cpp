@@ -14,25 +14,22 @@
 
 // Constructor actualizado con RemoteControl
 ManualPlayState::ManualPlayState(DataManager* dm, TrainingSession* session)
-    : dataManager(dm), currentSession(session)
+    : dataManager(dm), currentSession(session),changingState(false)
 {
 }
 
 void ManualPlayState::enter(StateManager* manager) {
-    LOG_PRINTLN("Entering ManualPlayState...");
-    
-    // 1. Inicializar HW del control remoto
-    //Send CMD
-    //manager->getHardwareManager()->setRemoteRxPower(true);
-    
-    // 2. Esperar estabilización (IMPORTANTE)
-    // Los módulos de radio tardan unos ms en arrancar al recibir energía.
-    vTaskDelay(50 / portTICK_PERIOD_MS); 
+    LOG_PRINTLN("Entering ManualPlayState (Multi-Shot Mode)...");
+    changingState = false; // Escudo Anti-Zombis
 
-    //3. Indicacion led del estado actual
-    //Send CMD
-    //manager->getUserInterface()->setLedPattern(LED_SUCCESS);
+    // 1. Inicializar HW del control remoto
+    manager->getHardwareManager()->sendCommand(CMD_REMOTE_POWER_ON);
+    
+    // 2. Esperar estabilización
+    vTaskDelay(50 / portTICK_PERIOD_MS); 
 }
+
+
 
 void ManualPlayState::execute(StateManager* manager) {
     Event event;
@@ -42,6 +39,7 @@ void ManualPlayState::execute(StateManager* manager) {
     if (xQueueReceive(manager->getEventQueue(), &event, portMAX_DELAY) == pdTRUE) {
         handleEvent(manager, event);
     }
+    
 }
 
 void ManualPlayState::exit(StateManager* manager) {
@@ -60,41 +58,34 @@ void ManualPlayState::exit(StateManager* manager) {
         currentSession = nullptr;
     }
 }
-
 void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
-    
+    if (changingState) return;
+
     switch (event.type) {
         
-        // --- CASO 1: ÉXITO (El hardware disparó el premio) ---
+        // --- BOTÓN 1: BIEN (Éxito) ---
         case EVENT_TRAINING_SUCCESS:
-            LOG_PRINTLN("[Manual] Reward Dispensed Successfully!");
-            // Feedback Visual opcional (ej. parpadeo rápido)
-            // manager->getUserInterface()->flashGreen(); 
-            saveRun("success");
-            break;
-
-        // --- CASO 2: FALLO (El hardware intentó pero falló) ---
-        case EVENT_TRAINING_FAILED:
-            LOG_PRINTLN("[Manual] Reward Trigger Failed (Jam/Error).");
-            // Feedback Visual de error
-            //manager->getUserInterface()->setLedPattern(LED_ERROR_DB); 
-            saveRun("fail");
-            break;
-
-        // --- CASO 3: FIN DEL JUEGO (Botón "Fin" presionado en control remoto) ---
-        case EVENT_PLAY_FINISHED:
-            LOG_PRINTLN("[Manual] Game Finished by user.");
+            LOG_PRINTLN("[Manual] Botón BIEN presionado. Guardando éxito...");
             
-            // Volvemos a Config (esto llamará a nuestro exit() y limpiará memoria)
-            // IMPORTANTE: Necesitamos pasarle el WebServerManager al ConfigState.
-            // Asumimos que StateManager tiene el getter configurado.
-            manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            // Opcional: Aquí podrías mandar la orden al Hardware de disparar el premio
+            // manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE);
+            
+            saveRun("success");
+            // No cambiamos de estado. Se queda esperando el próximo botón.
             break;
 
-        // --- CASO 4: INTERRUPTOR FÍSICO (Modo Online activado) ---
+        // --- BOTÓN 2: MAL (Fallo) ---
+        case EVENT_TRAINING_FAILED:
+            LOG_PRINTLN("[Manual] Botón MAL presionado. Guardando fallo...");
+            saveRun("fail");
+            // No cambiamos de estado. Se queda esperando el próximo botón.
+            break;
+
+        // --- BOTÓN 3: FIN (Salir) ---
+        case EVENT_PLAY_FINISHED:
         case EVENT_MODE_ONLINE_ACTIVATED:
-            LOG_PRINTLN("[Manual] Switch moved to Online. Aborting game.");
-            // Volvemos a Config primero para una salida limpia
+            LOG_PRINTLN("[Manual] Fin del entrenamiento. Saliendo a Config...");
+            changingState = true;
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             break;
 

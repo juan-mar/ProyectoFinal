@@ -139,7 +139,8 @@ void AutoPlayState::saveRun(const char* result) {
     if (currentSession == nullptr) return;
     
     currentSession->setResult(result);
-
+    currentSession->setDeviceCode(dataManager->getDeviceID());
+      
     String json;
     if (currentSession->serialize(json)) {
         dataManager->saveSessionFile(json);
