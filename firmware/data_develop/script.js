@@ -3,6 +3,8 @@ let currentMode = 'manual';
 let connectionLost = false;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 60; // 5 minutos (60 intentos x 5 seg)
+let trainingInProgress = false;
+let lastPendingSessions = 0;
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,14 +23,27 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('durationHelper').innerText = e.target.value + ' segundos';
         saveFormData();
     });
+    document.getElementById('timeoutInput').addEventListener('input', (e) => {
+        document.getElementById('timeoutHelper').innerText = e.target.value + ' segundos';
+        saveFormData();
+    });
 });
 
 // Cambiar modo (Manual / Auto)
 function setMode(mode) {
     currentMode = mode;
-    // Actualizar clases visuales
+    // Actualizar clases visuales de los botones
     document.getElementById('btn-manual').className = (mode === 'manual') ? 'mode-btn active' : 'mode-btn';
     document.getElementById('btn-auto').className = (mode === 'auto') ? 'mode-btn active' : 'mode-btn';
+    
+    // Ocultar o mostrar el campo de timeout (exclusivo Auto)
+    const timeoutCard = document.getElementById('timeoutCard');
+    if (mode === 'manual') {
+        timeoutCard.style.display = 'none';
+    } else {
+        timeoutCard.style.display = 'block';
+    }
+
     saveFormData(); // Guardar al cambiar modo
 }
 
@@ -41,6 +56,7 @@ function saveFormData() {
         distractors: document.getElementById('distractorsCheckbox').checked,
         context: document.getElementById('contextInput').value,
         duration: parseInt(document.getElementById('durationInput').value) || 30,
+        timeout: parseInt(document.getElementById('timeoutInput').value) || 120,
         mode: currentMode,
         timestamp: Date.now()
     };
@@ -49,14 +65,18 @@ function saveFormData() {
 
 function restoreFormData() {
     const saved = localStorage.getItem('trainingFormData');
-    if (!saved) return;
+    if (!saved) {
+        // Si no hay datos, forzamos que arranque en manual
+        setMode('manual');
+        return;
+    }
     
     try {
         const data = JSON.parse(saved);
         // Solo restaurar si es reciente (< 1 hora)
         if (Date.now() - data.timestamp < 3600000) {
             currentMode = data.mode || 'manual';
-            setMode(currentMode);
+            setMode(currentMode); // Esto ya se encarga de mostrar/ocultar el timeout
             
             // Restaurar todos los campos
             if (data.dogCode) {
@@ -82,9 +102,18 @@ function restoreFormData() {
                 durationInput.value = data.duration;
                 document.getElementById('durationHelper').innerText = data.duration + ' segundos';
             }
+
+            if (data.timeout) {
+                const timeoutInput = document.getElementById('timeoutInput');
+                timeoutInput.value = data.timeout;
+                document.getElementById('timeoutHelper').innerText = data.timeout + ' segundos';
+            }
+        } else {
+            setMode('manual'); // Si caducó, arranca en manual
         }
     } catch(e) {
         console.error('Error restaurando datos:', e);
+        setMode('manual');
     }
 }
 
@@ -113,30 +142,34 @@ async function checkConnection() {
         });
         
         if (response.ok) {
-            // Conexión OK
+            const data = await response.json();
+            
+            // Actualizar UI con datos de status
+            document.getElementById('bat-val').innerText = data.battery;
+            document.getElementById('sess-val').innerText = data.pending_sessions;
+            if (data.device_code) {
+                document.getElementById('device-code').innerText = data.device_code;
+            }
+            
+            // Detectar cambios en sesiones pendientes (fin de entrenamiento)
+            if (trainingInProgress && lastPendingSessions !== data.pending_sessions) {
+                lastPendingSessions = data.pending_sessions;
+                // Si cambió el counter, probablemente terminó algo
+                resetTrainingButton();
+            }
+            
             if (connectionLost) {
-                // Recuperación exitosa
                 connectionLost = false;
                 reconnectAttempts = 0;
                 hideOverlay();
                 
-                // Recargar datos del servidor
-                await loadDogs();
-                await loadStatus();
+                // Resetear botón de entrenamiento al reconectar
+                resetTrainingButton();
                 
-                // Mostrar mensaje de éxito temporal
                 const msg = document.getElementById('status-msg');
                 msg.style.color = 'green';
                 msg.innerText = '✅ Conexión restablecida';
                 setTimeout(() => { msg.innerText = ''; }, 3000);
-            } else {
-                // Actualización normal de status
-                const data = await response.json();
-                document.getElementById('bat-val').innerText = data.battery;
-                document.getElementById('sess-val').innerText = data.pending_sessions;
-                if (data.device_code) {
-                    document.getElementById('device-code').innerText = data.device_code;
-                }
             }
         } else {
             throw new Error('Bad response');
@@ -146,13 +179,25 @@ async function checkConnection() {
     }
 }
 
+function resetTrainingButton() {
+    const btn = document.getElementById('btn-start');
+    const msg = document.getElementById('status-msg');
+    
+    btn.disabled = false;
+    btn.innerText = "INICIAR ENTRENAMIENTO";
+    trainingInProgress = false;
+    
+    // Mostrar mensaje de estado limpio
+    msg.innerText = "";
+}
+
 function handleConnectionLost() {
     if (!connectionLost) {
         connectionLost = true;
         reconnectAttempts = 0;
         showOverlay(
-            '⚙️ Calibrando Sistema',
-            'WiFi desconectado. BLE activo.<br>La conexión se restablecerá automáticamente al terminar.'
+            '📡 Dispositivo Desconectado',
+            'WiFi desconectado. BLE activo.<br>Intentando reconectar automáticamente...'
         );
     } else {
         reconnectAttempts++;
@@ -165,7 +210,6 @@ function handleConnectionLost() {
     }
 }
 
-// Cargar lista de perros desde el ESP32
 async function loadDogs() {
     const selector = document.getElementById('dogSelector');
     
@@ -173,7 +217,7 @@ async function loadDogs() {
         const response = await fetch('/api/dogs');
         const dogs = await response.json();
         
-        selector.innerHTML = ''; // Limpiar opciones
+        selector.innerHTML = ''; 
 
         if (dogs.length === 0) {
             selector.innerHTML = '<option value="">⚠️ Sincroniza para descargar perros</option>';
@@ -182,13 +226,11 @@ async function loadDogs() {
 
         dogs.forEach(dog => {
             let opt = document.createElement('option');
-            // Aseguramos que usamos las claves correctas que vienen del JSON
             opt.value = dog.dog_code; 
             opt.text = dog.name;
             selector.add(opt);
         });
         
-        // Seleccionar el primero por defecto para evitar envíos nulos
         if(dogs.length > 0) selector.selectedIndex = 0;
 
     } catch (error) {
@@ -197,13 +239,10 @@ async function loadDogs() {
     }
 }
 
-// Cargar estado (batería, almacenamiento)
 async function loadStatus() {
-    // Esta función ahora es manejada por checkConnection()
-    // Se mantiene para compatibilidad pero no hace nada
+    // Manejado por checkConnection
 }
 
-// Enviar Configuración
 async function startTraining() {
     const btn = document.getElementById('btn-start');
     const msg = document.getElementById('status-msg');
@@ -212,11 +251,10 @@ async function startTraining() {
     const distractorsVal = document.getElementById('distractorsCheckbox').checked;
     const contextVal = document.getElementById('contextInput').value;
     const durationVal = parseInt(document.getElementById('durationInput').value) || 30;
+    const timeoutVal = parseInt(document.getElementById('timeoutInput').value) || 120;
 
-    // 1. Guardar datos antes de enviar
     saveFormData();
 
-    // 2. VALIDACIÓN ROBUSTA
     if (!dogVal || dogVal === "" || dogVal === "undefined") {
         alert("⚠️ Por favor selecciona un perro válido.");
         return;
@@ -232,24 +270,28 @@ async function startTraining() {
         return;
     }
 
+    // Validamos la duración siempre
     if (durationVal < 5 || durationVal > 120) {
         alert("⚠️ La duración debe estar entre 5 y 120 segundos.");
         return;
     }
 
-    // Bloquear UI
+    // Validamos el timeout solo en modo Auto
+    if (currentMode === 'auto' && (timeoutVal < 5 || timeoutVal > 120)) {
+        alert("⚠️ El timeout debe estar entre 5 y 120 segundos.");
+        return;
+    }
+
     btn.disabled = true;
     btn.innerText = "Enviando...";
     msg.innerText = "";
 
-    // Construir datos de tipo de entrenamiento
     const typeJson = {
         substance: substanceVal,
         distractors: distractorsVal,
         context: contextVal
     };
 
-    // Construir Payload para /api/start
     const payload = {
         dog_code: dogVal,
         mode: currentMode,
@@ -258,9 +300,10 @@ async function startTraining() {
         timestamp: new Date().toISOString()
     };
 
-    console.log("Enviando:", payload);
+    if (currentMode === 'auto') {
+        payload.timeout_s = timeoutVal;
+    }
 
-    // Enviar al Backend
     try {
         const res = await fetch('/api/start', {
             method: 'POST',
@@ -273,7 +316,13 @@ async function startTraining() {
         if (res.ok) {
             msg.style.color = "green";
             msg.innerText = "✅ ¡Configurado! Iniciando...";
-            // No limpiar datos aún, por si se calibra después
+            
+            // Marcar que hay entrenamiento en progreso
+            trainingInProgress = true;
+            lastPendingSessions = 0; // Reset para detectar cambios después
+            
+            // El botón se resetea cuando se detecte el fin del entrenamiento
+            // o cuando se reconecte después de una desconexión
         } else {
             throw new Error(data.msg || "Error desconocido");
         }
@@ -282,10 +331,10 @@ async function startTraining() {
         msg.innerText = "❌ Error: " + error.message;
         btn.innerText = "REINTENTAR";
         btn.disabled = false;
+        trainingInProgress = false;
     }
 }
 
-// Iniciar Calibración
 async function startCalibration() {
     const btn = document.getElementById('btn-calibrate');
     const msg = document.getElementById('status-msg');
@@ -294,10 +343,8 @@ async function startCalibration() {
         return;
     }
     
-    // Guardar datos del formulario antes de perder conexión
     saveFormData();
     
-    // Bloquear UI
     btn.disabled = true;
     btn.innerText = "Calibrando...";
     msg.innerText = "";
@@ -314,11 +361,10 @@ async function startCalibration() {
             msg.style.color = "green";
             msg.innerText = "✅ Calibración iniciada. Sigue las instrucciones del dispositivo.";
             
-            // Mostrar overlay preventivamente (WiFi se caerá pronto)
             setTimeout(() => {
                 connectionLost = true;
                 showOverlay(
-                    '⚙️ Calibrando Sistema',
+                    '📡 Dispositivo en Calibración',
                     'WiFi desconectado. BLE activo.<br>La conexión se restablecerá automáticamente al terminar.'
                 );
             }, 2000);

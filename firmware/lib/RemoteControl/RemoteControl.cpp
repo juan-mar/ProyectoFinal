@@ -1,57 +1,36 @@
-/****************************************************************
- * @file RemoteControl.cpp
- * @brief Implements RemoteControl logic.
- ****************************************************************/
-
 #include "RemoteControl.h"
-#include "Events.h"
-#include "config.h"
+#include "HardwareConfig.h"
 
-RemoteControl::RemoteControl() : fsmQueue(nullptr), isRunning(false) {
+RemoteControl::RemoteControl() : nrf24(PIN_NRF24_CE, PIN_NRF24_CSN) {}
+
+bool RemoteControl::init() {
+    if (!nrf24.init()) return false;
+    if (!nrf24.setChannel(2)) return false;
+    if (!nrf24.setRF(RH_NRF24::DataRate250kbps, RH_NRF24::TransmitPower0dBm)) return false;
+    nrf24.sleep();
+    return true;
 }
 
-void RemoteControl::begin(QueueHandle_t queue) {
-    LOG_PRINTLN("RemoteControl: Initializing RF Hardware...");
-    this->fsmQueue = queue;
-    this->isRunning = true;
+int RemoteControl::checkForCommand() {
+    if (nrf24.available()) { 
+        uint8_t buf[RH_NRF24_MAX_MESSAGE_LEN];
+        uint8_t len = sizeof(buf);
 
-    // TODO: Inicializar NRF24L01 aquí
-    // radio.begin();
-    // radio.openReadingPipe(...);
-    // radio.startListening();
-}
+        if (nrf24.recv(buf, &len)) {
+            // Transformamos el buffer a un String para compararlo fácil
+            String msg = String((char*)buf);
+            msg.trim(); // Limpiamos basura o saltos de línea
 
-void RemoteControl::stop() {
-    LOG_PRINTLN("RemoteControl: Stopping RF Hardware...");
-    this->isRunning = false;
-    
-    // TODO: Apagar radio
-    // radio.powerDown();
-}
-
-void RemoteControl::update() {
-    if (!isRunning) return;
-
-    // TODO: Lógica real de lectura del NRF24
-    /*
-    if (radio.available()) {
-        char text[32] = "";
-        radio.read(&text, sizeof(text));
-        
-        if (strcmp(text, "BTN_TRIGGER") == 0) {
-            sendEvent(EVENT_TRAINING_SUCCESS); // O EVENT_TRIGGER_REWARD
-        }
-        else if (strcmp(text, "BTN_FINISH") == 0) {
-            sendEvent(EVENT_PLAY_FINISHED);
+            // ACÁ DEPENDE DE QUÉ TEXTO MANDE TU CONTROL REMOTO (TX)
+            // Asumo unos textos de ejemplo, cambialos por los tuyos:
+            if (msg == "BIEN") return CMD_REMOTE_SUCCESS;
+            if (msg == "MAL")  return CMD_REMOTE_FAIL;
+            if (msg == "FIN")  return CMD_REMOTE_EXIT;
         }
     }
-    */
+    return CMD_REMOTE_NONE; // No hay mensajes o falló la lectura
 }
 
-void RemoteControl::sendEvent(int type) {
-    if (fsmQueue != nullptr) {
-        Event ev;
-        ev.type = (EventType)type;
-        xQueueSend(fsmQueue, &ev, 0);
-    }
+void RemoteControl::sleep() {
+    nrf24.sleep(); // Lo manda a dormir profundamente
 }

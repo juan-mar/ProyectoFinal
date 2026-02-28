@@ -210,7 +210,8 @@ void WebServerManager::handleApiPostStart(AsyncWebServerRequest *request, uint8_
     // Extraer datos del documento JSON
     const char* dogCode = doc["dog_code"] | ""; 
     const char* mode = doc["mode"] | "manual"; 
-    int durationS = doc["duration_s"] | 30;
+    int durationS = doc["duration_s"] | 60;
+    int timeoutS = doc["timeout_s"] | 120;  
     const char* typeJson = doc["type_json"] | "";
     const char* timestamp = doc["timestamp"] | "";
 
@@ -218,6 +219,7 @@ void WebServerManager::handleApiPostStart(AsyncWebServerRequest *request, uint8_
     LOG_PRINTF("  DogCode: %s\n", dogCode);
     LOG_PRINTF("  Mode: %s\n", mode);
     LOG_PRINTF("  Duration: %d segundos\n", durationS);
+    LOG_PRINTF("  Timeout: %d segundos\n", timeoutS);
     LOG_PRINTF("  Timestamp: %s\n", timestamp);
     LOG_PRINTF("  TypeJson: %s\n", typeJson);
 
@@ -232,7 +234,8 @@ void WebServerManager::handleApiPostStart(AsyncWebServerRequest *request, uint8_
         // Escribir datos en el objeto de sesion
         this->targetSession->setDogCode(dogCode);
         this->targetSession->setDuration(durationS);
-        
+        this->targetSession->setTimeout(timeoutS);
+
         if (strlen(timestamp) > 0) this->targetSession->setStartedAt(timestamp);
 
         // Condiciones se completan con sensores despues
@@ -245,7 +248,7 @@ void WebServerManager::handleApiPostStart(AsyncWebServerRequest *request, uint8_
         }
         
         LOG_PRINTLN("[SUCCESS] Sesion guardada en memoria");
-        LOG_PRINTF("  Configuration: dog=%s duration=%ds\n", dogCode, durationS);
+        LOG_PRINTF("  Configuration: dog=%s duration=%ds timeout=%ds\n", dogCode, durationS, timeoutS);
     } else {
         LOG_PRINTLN("[WARNING] No target session set");
     }

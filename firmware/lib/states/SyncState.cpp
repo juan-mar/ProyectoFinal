@@ -107,6 +107,11 @@ void syncTaskFunction(void* parameter) {
         syncFailed = true;
     }
 
+    if (!syncFailed && !g_cancelSync) {
+        LOG_PRINTLN("[SyncTask] WiFi conectado. Esperando asignacion de DNS (DHCP)...");
+        vTaskDelay(2000 / portTICK_PERIOD_MS); // Le damos 2 segundos al router
+    }
+    
     // 3. Login
     if (!syncFailed && !g_cancelSync) {
         LOG_PRINTLN("\n[SyncTask] WiFi connected. Logging in...");

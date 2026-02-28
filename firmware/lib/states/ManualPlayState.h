@@ -36,6 +36,11 @@ private:
     DataManager* dataManager;
     TrainingSession* currentSession;
     bool changingState; // Escudo para evitar manejar eventos durante la transición
+    unsigned long roundStartMillis; // Para medir duración del juego
+    bool isWaitingReward; // Flag para controlar el temporizador de recompensa
+    int rewardDelayMs; // Tiempo a esperar antes de auto-disparar el éxito
+    int rewardStartTime;
+
     
     // Helper para guardar y limpiar
     void saveRun(const char* result);

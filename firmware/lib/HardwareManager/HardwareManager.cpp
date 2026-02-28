@@ -54,9 +54,12 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #endif
 
     #if ENABLE_REMOTE_CONTROL
-    pinMode(PIN_REMOTE_POWER, OUTPUT);
-    digitalWrite(PIN_REMOTE_POWER, LOW);
-    LOG_PRINTLN("  - Remote control pin initialized");
+    if (_remoteControl.init()) {
+        LOG_PRINTLN("[Hardware] NRF24 Control Remoto inicializado OK.");
+    } else {
+        LOG_PRINTLN("[Hardware] ERROR: Falló el NRF24.");
+    }
+    _peripheralState.remoteEnabled = false;
     #endif
 
     LOG_PRINTLN("HardwareManager: Initialization complete");
@@ -134,50 +137,79 @@ void HardwareManager::updateLeds() {
 void HardwareManager::checkDrivers() {
     // Solo chequeamos NRF24 si está habilitado
     if (_peripheralState.remoteEnabled) {
-       /*
-       if (_remoteControl.checkInput()) { // checkInput devuelve true si hay datos válidos
-            // ¡EVENTO DETECTADO! Avisar a la FSM
-            Event ev; 
-          //  ev.type = EVENT_TRIGGER_DETECTED;
-          //  ev.data = SOURCE_REMOTE; 
-            xQueueSend(_fsmQueue, &ev, 0);
-        }       
-       */     
+      update_remote();
     }
-    // Nota: El BLE no se chequea aquí porque corre en su propia Task y manda eventos directo
     if(_peripheralState.tagEnabled){
-        switch(_bleScanner.scan()){
-            case CALIBRATING:
-                //LOG_PRINTLN("[HW] BLE Scanner: CALIBRATING");
-                break;
-            case CALIB_OK:
-            {
-                LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
-                //SEND EVENT TO FSM IF NEEDED
-                Event ev;
-                ev.type = EVENT_CALIBRATION_COMPLETE;
-                xQueueSend(_fsmQueue, &ev, 0);
-                break;
-            }            
-            case DETECT_FAIL: //buscando can - fuera de zona
-            {
-                LOG_PRINTLN("[HW] BLE Scanner: LOST!");
-                Event ev;
-                ev.type = EVENT_DOG_LOST;
-                xQueueSend(_fsmQueue, &ev, 0);
-                break;
-            }
-            case DETECT_OK: //can dectectado - entró a zona
-            {
-                LOG_PRINTLN("[HW] BLE Scanner: DETECTED!");
-                Event ev;
-                ev.type = EVENT_DOG_DETECTED;
-                xQueueSend(_fsmQueue, &ev, 0);
-                break;
-            }
-            default:
-                break;
-            }
+        update_tag();
+    }
+}
+
+void HardwareManager::update_remote() {
+    int remoteCmd = _remoteControl.checkForCommand();
+    
+    switch (remoteCmd) {
+        case CMD_REMOTE_SUCCESS:
+        {
+            LOG_PRINTLN("[HW] Control Remoto: BIEN");
+            Event evt = {EVENT_DOG_DETECTED, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            break;
+        }
+        
+        case CMD_REMOTE_FAIL:
+        {
+            LOG_PRINTLN("[HW] Control Remoto: MAL");
+            Event evt = {EVENT_DOG_LOST, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            break;
+        }
+        
+        case CMD_REMOTE_EXIT:
+        {
+            LOG_PRINTLN("[HW] Control Remoto: FIN");
+            Event evt = {EVENT_PLAY_FINISHED, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            break;
+        }
+
+        case CMD_REMOTE_NONE:
+        default:
+            break;
+    }
+}
+
+void HardwareManager::update_tag() {
+    switch(_bleScanner.scan()){
+        case CALIBRATING:
+            //LOG_PRINTLN("[HW] BLE Scanner: CALIBRATING");
+            break;
+        case CALIB_OK:
+        {
+            LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
+            //SEND EVENT TO FSM IF NEEDED
+            Event ev;
+            ev.type = EVENT_CALIBRATION_COMPLETE;
+            xQueueSend(_fsmQueue, &ev, 0);
+            break;
+        }            
+        case DETECT_FAIL: //buscando can - fuera de zona
+        {
+            LOG_PRINTLN("[HW] BLE Scanner: LOST!");
+            Event ev;
+            ev.type = EVENT_DOG_LOST;
+            xQueueSend(_fsmQueue, &ev, 0);
+            break;
+        }
+        case DETECT_OK: //can dectectado - entró a zona
+        {
+            LOG_PRINTLN("[HW] BLE Scanner: DETECTED!");
+            Event ev;
+            ev.type = EVENT_DOG_DETECTED;
+            xQueueSend(_fsmQueue, &ev, 0);
+            break;
+        }
+        default:
+            break;
     }
 }
 
@@ -212,7 +244,6 @@ void HardwareManager::processCommand(HwMessage msg) {
         case CMD_REMOTE_POWER_ON:
             #if ENABLE_REMOTE_CONTROL
             if (!_peripheralState.remoteEnabled) {
-                digitalWrite(PIN_REMOTE_POWER, HIGH);
                 _peripheralState.remoteEnabled = true;
                 LOG_PRINTLN("[HW] Remote control powered ON");
             }
@@ -222,8 +253,8 @@ void HardwareManager::processCommand(HwMessage msg) {
         case CMD_REMOTE_POWER_OFF:
             #if ENABLE_REMOTE_CONTROL
             if (_peripheralState.remoteEnabled) {
-                digitalWrite(PIN_REMOTE_POWER, LOW);
                 _peripheralState.remoteEnabled = false;
+                _remoteControl.sleep(); 
                 LOG_PRINTLN("[HW] Remote control powered OFF");
             }
             #endif

@@ -7,6 +7,7 @@
  * Headers
  ****************************************************************/
 #include "TrainingSession.h"
+#include <time.h>
 #include "config.h"
 
 /****************************************************************
@@ -14,7 +15,7 @@
  ****************************************************************/
 
 TrainingSession::TrainingSession() 
-    : p_duration_s(0), p_result("unknown"), p_timeout_s(20){
+    : p_duration_s(0), p_result("unknown"), p_timeout_s(0){
 
 }
 
@@ -33,6 +34,41 @@ void TrainingSession::setResult(String result) { p_result = result; }
 // --- Getters ---
 int TrainingSession::getDuration() { return p_duration_s; }
 int TrainingSession::getTimeout() { return p_timeout_s; }
+
+// --- Timers ---
+void TrainingSession::addSecondsToTimeStamp(int seconds) {
+    if (p_started_at.length() == 0) return;
+
+    struct tm tm_time = {0};
+    int ms = 0;
+    
+    // 1. Extraemos los números del texto "YYYY-MM-DDTHH:MM:SS.SSSZ"
+    int parsed = sscanf(p_started_at.c_str(), "%d-%d-%dT%d:%d:%d.%dZ", 
+           &tm_time.tm_year, &tm_time.tm_mon, &tm_time.tm_mday, 
+           &tm_time.tm_hour, &tm_time.tm_min, &tm_time.tm_sec, &ms);
+           
+    if (parsed >= 6) { 
+        // 2. Ajustamos los valores al estándar de C++
+        tm_time.tm_year -= 1900;
+        tm_time.tm_mon -= 1;
+        
+        // 3. ¡LA MAGIA! Le sumamos los segundos que pasaron
+        tm_time.tm_sec += seconds;
+        
+        // mktime() es inteligente: si los segundos se pasan de 60, suma 1 minuto; 
+        // si los minutos pasan de 60, suma 1 hora, etc. Normaliza todo solo.
+        mktime(&tm_time); 
+        
+        // 4. Volvemos a armar el string limpio
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+                 tm_time.tm_year + 1900, tm_time.tm_mon + 1, tm_time.tm_mday,
+                 tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec, ms);
+                 
+        // Guardamos la nueva hora para la próxima ronda
+        p_started_at = String(buf);
+    }
+}
 
 
 bool TrainingSession::serialize(String &outJsonString) {

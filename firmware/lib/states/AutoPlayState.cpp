@@ -20,6 +20,7 @@ void AutoPlayState::enter(StateManager* manager) {
 
     // Iniciar cronómetro global del juego
     stateStartTime = millis();
+    LOG_PRINTLN("[AutoPlay] Iniciando juego automático. Tiempo límite: " + String(currentSession->getTimeout()) + " segundos.");
     vTaskDelay(pdMS_TO_TICKS(100)); 
 
     // Encender BLE
@@ -65,6 +66,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
             if (internalState == DOG_DETECTED_TIMING) {
                 LOG_PRINTLN("[Auto] Perro salió antes de tiempo. Reiniciando espera...");
                 internalState = WAITING_FOR_DOG;
+                stateStartTime = millis(); 
             }
             break;
 

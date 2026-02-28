@@ -42,9 +42,14 @@ public:
     void setDuration(int seconds);
     void setTimeout(int seconds);
     void setResult(String result); // e.g., "success", "fail"
+
+    // --- Getters ---
     int getDuration();
     int getTimeout();
 
+    // --- timers
+    void addSecondsToTimeStamp(int seconds);
+    
     /**
      * @brief Serializes the entire session object into a JSON string,
      * ready to be saved to the log or sent to Supabase.

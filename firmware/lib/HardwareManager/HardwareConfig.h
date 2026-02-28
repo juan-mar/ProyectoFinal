@@ -16,7 +16,12 @@
 //#define PIN_TAG_POWER 32
 
 // --- Remote Control (NRF24) ---
-#define PIN_REMOTE_POWER 17 //TX2 esp32
+#define PIN_NRF24_CE     17  // Cambiá este número por el pin físico que uses
+#define PIN_NRF24_CSN    16  // Cambiá este número por el pin físico que uses
+// Pines SPI por defecto (Conectar directo, la librería los maneja):
+// MOSI -> GPIO 23
+// MISO -> GPIO 19
+// SCK  -> GPIO 18
 
 // --- Solenoid / Reward Dispenser ---
 #define PIN_SOLENOID 4      // Pin para recomppensa
@@ -91,7 +96,7 @@
  * Para compilación condicional en diferentes variantes
  */
 #define ENABLE_TAG_READER 1
-#define ENABLE_REMOTE_CONTROL 0
+#define ENABLE_REMOTE_CONTROL 1
 #define ENABLE_LED_CONTROL 0
 #define ENABLE_SOLENOID 1
 #define ENABLE_LAUNCHER 1

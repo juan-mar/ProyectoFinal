@@ -11,22 +11,29 @@
 #include "ConfigState.h"
 #include "Events.h"
 #include "config.h"
+#include "SyncState.h"
 
 // Constructor actualizado con RemoteControl
 ManualPlayState::ManualPlayState(DataManager* dm, TrainingSession* session)
-    : dataManager(dm), currentSession(session),changingState(false)
+    : dataManager(dm), currentSession(session),changingState(false), 
+    roundStartMillis(0), isWaitingReward(false), rewardDelayMs(0), rewardStartTime(0)
+    
 {
 }
 
 void ManualPlayState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ManualPlayState (Multi-Shot Mode)...");
-    changingState = false; // Escudo Anti-Zombis
+    changingState = false; 
 
     // 1. Inicializar HW del control remoto
     manager->getHardwareManager()->sendCommand(CMD_REMOTE_POWER_ON);
     
     // 2. Esperar estabilización
-    vTaskDelay(50 / portTICK_PERIOD_MS); 
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    roundStartMillis = millis();
+    isWaitingReward = false;
+    rewardDelayMs = 0;
+    rewardStartTime = 0;
 }
 
 
@@ -34,25 +41,20 @@ void ManualPlayState::enter(StateManager* manager) {
 void ManualPlayState::execute(StateManager* manager) {
     Event event;
     
-    // Bloqueo indefinido: Esperamos a que el Hardware (RemoteControl)
-    // o el Usuario (Interruptor) nos mande un evento a la cola.
-    if (xQueueReceive(manager->getEventQueue(), &event, portMAX_DELAY) == pdTRUE) {
+    if (xQueueReceive(manager->getEventQueue(), &event, pdMS_TO_TICKS(50)) == pdTRUE) {
         handleEvent(manager, event);
     }
-    
+    if (!changingState) {
+        update(manager);
+    } 
 }
 
 void ManualPlayState::exit(StateManager* manager) {
     LOG_PRINTLN("Exiting ManualPlayState...");
 
     // 1. Detener Software y HW del control remoto
-    // Send CMD
-
-    // 2. Apagar Hardware (Ahorro de energía)
-    //Send CMD 
-    //manager->getUserInterface()->setRemoteRxPower(false);
-
-    // 3. Limpiar Sesión
+    manager->getHardwareManager()->sendCommand(CMD_REMOTE_POWER_OFF);
+    
     if (currentSession != nullptr) {
         delete currentSession;
         currentSession = nullptr;
@@ -63,30 +65,55 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
 
     switch (event.type) {
         
-        // --- BOTÓN 1: BIEN (Éxito) ---
+        // --- EVENTO 1: DETECCIÓN (Control Remoto: Botón "BIEN") ---
+        case EVENT_DOG_DETECTED:
+            LOG_PRINTLN("[Manual] Botón BIEN (Detectado). Iniciando cuenta regresiva...");
+            isWaitingReward = true;
+            rewardStartTime = millis();
+            rewardDelayMs = currentSession->getDuration() * 1000; 
+            break;
+
+        // --- EVENTO 2: PÉRDIDA (Control Remoto: Botón "MAL") ---
+        case EVENT_DOG_LOST:
+            if (isWaitingReward) {
+                // El perro rompió la posición antes de tiempo
+                LOG_PRINTLN("[Manual] Botón MAL. Perro rompió posición. Cancelando temporizador.");
+                isWaitingReward = false; 
+            } else {
+                // Marcó la caja equivocada directamente
+                LOG_PRINTLN("[Manual] Botón MAL sin posición. Anotando fallo definitivo...");
+                
+                // Auto-disparamos el evento de fallo
+                Event ev;
+                ev.type = EVENT_TRAINING_FAILED;
+                xQueueSend(manager->getEventQueue(), &ev, 0);
+            }
+            break;
+
+        // --- EVENTO 3: ÉXITO (Auto-disparado por el update) ---
         case EVENT_TRAINING_SUCCESS:
-            LOG_PRINTLN("[Manual] Botón BIEN presionado. Guardando éxito...");
-            
-            // Opcional: Aquí podrías mandar la orden al Hardware de disparar el premio
-            // manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE);
-            
+            LOG_PRINTLN("[Manual] Procesando ÉXITO. Disparando premio...");
+            manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE, 0);
             saveRun("success");
-            // No cambiamos de estado. Se queda esperando el próximo botón.
             break;
 
-        // --- BOTÓN 2: MAL (Fallo) ---
+        // --- EVENTO 4: FALLO (Auto-disparado por el Botón "MAL") ---
         case EVENT_TRAINING_FAILED:
-            LOG_PRINTLN("[Manual] Botón MAL presionado. Guardando fallo...");
+            LOG_PRINTLN("[Manual] Procesando FALLO...");
             saveRun("fail");
-            // No cambiamos de estado. Se queda esperando el próximo botón.
             break;
 
-        // --- BOTÓN 3: FIN (Salir) ---
+        // --- EVENTO 5: FIN DEL JUEGO (Control Remoto: Botón 3 o Mantener presionado) ---
         case EVENT_PLAY_FINISHED:
-        case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[Manual] Fin del entrenamiento. Saliendo a Config...");
             changingState = true;
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            break;
+
+        case EVENT_MODE_ONLINE_ACTIVATED:
+            LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
+            changingState = true;
+            manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
 
         default:
@@ -95,29 +122,42 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
 }
 
 void ManualPlayState::update(StateManager* manager) {
-
+    if (isWaitingReward) {
+        if (millis() - rewardStartTime >= rewardDelayMs) {
+            
+            LOG_PRINTLN("[Manual] ¡Tiempo cumplido! Auto-disparando EVENT_TRAINING_SUCCESS...");
+            isWaitingReward = false; // Apagamos el temporizador
+            
+            // Creamos un evento de éxito y lo inyectamos en nuestra propia cola
+            Event ev;
+            ev.type = EVENT_TRAINING_SUCCESS;
+            xQueueSend(manager->getEventQueue(), &ev, 0); 
+        }
+    }
 }
 
 void ManualPlayState::saveRun(const char* result) {
     if (currentSession == nullptr) return;
-    
-    // 2. Completar datos
-    currentSession->setResult(result);
-    // Nota: setStartedAt ya se configuró en ConfigState con la hora del celular
 
-    // 3. Serializar y Guardar
+    currentSession->setResult(result);    
+    
+    // 2. Serializar y Guardar en LittleFS
     String json;
     if (currentSession->serialize(json)) {
         if (dataManager->saveSessionFile(json)) {
-            LOG_PRINTLN(">> Run saved to LittleFS.");
-        } else {
-            LOG_PRINTLN(">> ERROR saving run.");
+            LOG_PRINTF(">> Tiro Manual guardado: %s \n", result);
         }
     }
 
-    // 4. LIMPIAR PARA EL SIGUIENTE DISPARO (Multi-run)
-    // Mantenemos al perro configurado, pero borramos resultado
+    // 3. LIMPIAR PARA EL SIGUIENTE DISPARO
     currentSession->setResult("");
     
-    LOG_PRINTLN("Ready for next shot...");
+    //Adelantamos el reloj base sumando la duración de esta ronda
+    unsigned long now = millis();
+    int elapsedSeconds = (now - roundStartMillis) / 1000;
+    currentSession->addSecondsToTimeStamp(elapsedSeconds);
+    
+    roundStartMillis = millis();
+    
+    LOG_PRINTLN("[Manual] Reloj avanzado. Listo para el próximo tiro...");
 }

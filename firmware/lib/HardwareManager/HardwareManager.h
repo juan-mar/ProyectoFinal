@@ -135,12 +135,21 @@ private:
 
     // Métodos Privados de ayuda
     void processCommand(HwMessage msg);
+    
+    // --- Actuators
     void updateActuators();
     void updateLeds();
     void updateSolenoid();
     void updateLauncher();
+    
+    // --- Drivers
     void checkDrivers();
+    void update_tag();
+    void update_remote();
+    
+    // --- Sensors
     void readSensors();            // Batería, Temperatura
+
     
     // Métodos auxiliares específicos
     void enableTag(bool mode = false);  // mode: false=detección, true=calibración

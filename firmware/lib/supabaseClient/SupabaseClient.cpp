@@ -77,6 +77,8 @@ bool SupabaseClient::listDogs(String accessToken, String &outJsonString) {
     if (httpCode == 200) {
         outJsonString = http.getString();
         success = true;
+        LOG_PRINTLN("[Supabase] Perros descargados con exito. Payload:");
+        LOG_PRINTLN(outJsonString);
     } else {
         LOG_PRINTF("SupabaseClient::listDogs HTTP Error: %d\n", httpCode);
         LOG_PRINTLN(http.getString());

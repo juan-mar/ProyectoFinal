@@ -219,8 +219,19 @@ void loop() {
                 case 'm': // Manual Play
                     event.type = EVENT_START_MANUAL_PLAY;
                     break;
+                case 'q':
+                    event.type = EVENT_PLAY_FINISHED;
+                    break;    
                 case 'c': // Calibration
                     event.type = EVENT_START_CALIBRATION;
+                    break;
+
+                // --- COMANDOS DE HARDWARE (vía HardwareManager) ---
+                case 'd': // Calibration
+                    event.type = EVENT_DOG_DETECTED;
+                    break;
+                case 'x': // Dog Lost
+                    event.type = EVENT_DOG_LOST;
                     break;
 
                 // --- HARDWARE COMMANDS ---
@@ -302,7 +313,16 @@ void loop() {
                     g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
                     LOG_PRINTLN("--- Saved Wifi ---");
                 break;        
-                
+                case '-':   //format LittleFS (CUIDADO: Borra todo lo guardado en LittleFS)
+                    LOG_PRINTLN("\n[Test] Formatting LittleFS...");
+                    if (LittleFS.format()) {
+                        LOG_PRINTLN("[Test] LittleFS formatted successfully.");
+                    } else {
+                        LOG_PRINTLN("[Test] ERROR: Failed to format LittleFS!");
+                    }
+                    sendEvent = false;
+                    break;
+
                 default:
                     sendEvent = false;
                     LOG_PRINTF("Simulator: Unknown command '%c'\n", command);

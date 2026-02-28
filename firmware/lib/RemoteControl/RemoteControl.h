@@ -1,45 +1,31 @@
-    /****************************************************************
- * @file RemoteControl.h
- * @brief Hardware driver for the RF Remote Control (e.g., NRF24).
- * Handles receiving signals and translating them to FSM events.
- ****************************************************************/
-
 #ifndef REMOTE_CONTROL_H
 #define REMOTE_CONTROL_H
 
-#include <Arduino.h>
-#include <freertos/queue.h>
+#include <RH_NRF24.h>
+
+// Definimos los comandos que puede enviar el control
+#define CMD_REMOTE_NONE    0
+#define CMD_REMOTE_SUCCESS 1  // Botón BIEN
+#define CMD_REMOTE_FAIL    2  // Botón MAL
+#define CMD_REMOTE_EXIT    3  // Botón FIN
 
 class RemoteControl {
+
+
 public:
+    // El constructor recibe los pines CE y CSN del ESP32
     RemoteControl();
-
-    /**
-     * @brief Inicializa el hardware de radio (NRF24).
-     * @param fsmQueue Cola para enviar eventos (TRIGGER, FINISH).
-     */
-    void begin(QueueHandle_t fsmQueue);
-
-    /**
-     * @brief Apaga la radio o la pone en bajo consumo.
-     */
-    void stop();
-
-    /**
-     * @brief Polling loop. Llamar si la librería de radio requiere
-     * revisar datos constantemente (no usa interrupciones).
-     */
-    void update();
+    
+    bool init();
+    
+    // Función no bloqueante para leer el control
+    int checkForCommand();
+    
+    // Función para poner el módulo en modo de bajo consumo
+    void sleep();
 
 private:
-    QueueHandle_t fsmQueue;
-    bool isRunning;
-    
-    // Aquí irían tus objetos de hardware, ej:
-    // RF24 radio; 
-    
-    // Helper para enviar eventos a la FSM
-    void sendEvent(int type);
+    RH_NRF24 nrf24;
 };
 
 #endif // REMOTE_CONTROL_H

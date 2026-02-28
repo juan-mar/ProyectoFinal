@@ -16,7 +16,6 @@
         <h2>🐶 Configurar Sesión</h2>
     </header>
 
-    <!-- Overlay de Calibración/Desconexión -->
     <div id="overlay" class="overlay hidden">
         <div class="overlay-content">
             <div class="spinner"></div>
@@ -59,8 +58,8 @@
             <input type="text" id="contextInput" placeholder="Ej: Interior urbano, al aire libre, etc.">
         </div>
 
-        <div class="card">
-            <label>Duración de Espera (segundos):</label>
+        <div class="card" id="durationCard">
+            <label>Duración de Recompensa (segundos):</label>
             <input type="number" id="durationInput" min="5" max="120" value="30" placeholder="5-120 segundos">
             <small id="durationHelper">30 segundos</small>
         </div>
@@ -71,6 +70,12 @@
                 <button id="btn-manual" class="mode-btn active" onclick="setMode('manual')">Manual</button>
                 <button id="btn-auto" class="mode-btn" onclick="setMode('auto')">Auto</button>
             </div>
+        </div>
+
+        <div class="card" id="timeoutCard" style="display: none;">
+            <label>Timeout Modo Auto (segundos):</label>
+            <input type="number" id="timeoutInput" min="5" max="120" value="120" placeholder="5-120 segundos">
+            <small id="timeoutHelper">120 segundos</small>
         </div>
 
         <button id="btn-start" onclick="startTraining()">INICIAR ENTRENAMIENTO</button>

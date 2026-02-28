@@ -18,7 +18,7 @@
 // States we can transition to
 #include "SyncState.h"
 #include "CalibrationState.h"
-// #include "ManualPlayState.h"
+#include "ManualPlayState.h"
 #include "AutoPlayState.h"
 
 /****************************************************************
@@ -93,12 +93,14 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
             break;
 
         case EVENT_START_MANUAL_PLAY:
+        {
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
             changingState = true;
-            // manager->changeState(new ManualPlayState(dataManager,trainingSession));
-            this->sessionConfig = nullptr;
+            TrainingSession* sessionToPass = this->sessionConfig;            
+            this->sessionConfig = nullptr; 
+            manager->changeState(new ManualPlayState(dataManager,sessionToPass));
             break;
-
+        }    
         case EVENT_START_AUTO_PLAY:
         {
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
