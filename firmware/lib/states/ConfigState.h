@@ -44,7 +44,8 @@ private:
     DataManager* dataManager;       
     TrainingSession* sessionConfig; 
     WebServerManager* webServer; 
-    bool changingState; 
+    bool changingState;
+    bool firstTime; 
 };
 
 #endif // CONFIG_STATE_H

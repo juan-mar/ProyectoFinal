@@ -35,22 +35,31 @@
  ****************************************************************/
 
 ConfigState::ConfigState(DataManager* dataManager, WebServerManager* webServer) 
-    : dataManager(dataManager), webServer(webServer),changingState(false) 
+    : dataManager(dataManager), webServer(webServer), changingState(false), firstTime(false) 
 {}
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
+    PIN_MODE(2, OUTPUT); // Debug LED
+    PIN_HIGH(2);          // Turn on debug LED
     changingState = false;
     this->sessionConfig = new TrainingSession();
     
-    //TODO: Set LEDs as IDLE OFFLINE-CONFIG
-    //manager->getUserInterface()->setLedPattern(LED_IDLE_OFFLINE);
 
     webServer->setTargetSession(this->sessionConfig);
-    webServer->begin();
+    webServer->begin(); //to avoid heap corruption with event queue
 }
 
 void ConfigState::execute(StateManager* manager) {
+    // Lazy initialization of web server after queue is stable
+    if (!firstTime) {
+        webServer->begin();
+        firstTime = true;
+        LOG_PRINTLN("ConfigState: First in - Start Launcher");
+        manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_ON, 0);
+
+    }
+
     Event event;
     QueueHandle_t queue = manager->getEventQueue();
 

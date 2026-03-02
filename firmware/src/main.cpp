@@ -91,6 +91,7 @@ void setup() {
 
     g_webServerManager->setDataManager(g_dataManager);
     g_webServerManager->setStateManager(g_stateManager);
+    g_webServerManager->setHardwareManager(g_hardwareManager);
     
     g_stateManager->begin();
     
@@ -275,11 +276,7 @@ void loop() {
                     sendEvent = false;
                     LOG_PRINTLN("[TEST] CMD_SOLENOID_FIRE sent");
                     break;
-                case 'F': // Launcher Fire
-                    g_hardwareManager->sendCommand(CMD_LAUNCHER_FIRE, 0);
-                    sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_LAUNCHER_FIRE sent");
-                    break;
+               
                 // --- PRUEBAS DE DATOS ---
                 case 'w': // Write Session (Simular fin de juego)
                     LOG_PRINTLN("\n[Test] Simulating completed training...");

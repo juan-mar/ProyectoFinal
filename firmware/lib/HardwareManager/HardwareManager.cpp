@@ -9,11 +9,16 @@ HardwareManager::HardwareManager()
     _peripheralState.tagEnabled = false;
     _peripheralState.remoteEnabled = false;
     
+    // Inicializar estados de mode switches
+    _modeSwitchState.prevStateA = false;
+    _modeSwitchState.prevStateM = false;
+    
     // Inicializar estados de actuadores
     _actuatorState.solenoidActive = false;
     _actuatorState.solenoidOffTime = 0;
     _actuatorState.launcherActive = false;
-    _actuatorState.launcherOffTime = 0;
+    _actuatorState.launcherEN1OnTime = 0;
+    _actuatorState.launcherEN2Pending = false;
     _actuatorState.currentLedPattern = LED_OFF;
     _actuatorState.ledSequenceRunning = false;
     _actuatorState.ledBlinkRate = 1000;
@@ -62,6 +67,21 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     _peripheralState.remoteEnabled = false;
     #endif
 
+    #if ENABLE_BATTERY_MONITOR
+    if (_batteryMonitor.begin()) {
+        LOG_PRINTLN("  - Battery Monitor initialized");
+    } else {
+        LOG_PRINTLN("  - WARNING: Battery Monitor init failed");
+    }
+    #endif
+    
+    // Init Mode Switch pins
+    pinMode(PIN_MODE_SWITCH_A, INPUT_PULLUP);
+    pinMode(PIN_MODE_SWITCH_M, INPUT_PULLUP);
+    _modeSwitchState.prevStateA = digitalRead(PIN_MODE_SWITCH_A);
+    _modeSwitchState.prevStateM = digitalRead(PIN_MODE_SWITCH_M);
+    LOG_PRINTLN("  - Mode Switch pins initialized");
+    
     LOG_PRINTLN("HardwareManager: Initialization complete");
 }
 
@@ -87,6 +107,8 @@ void HardwareManager::update() {
     updateActuators();
 
     checkDrivers();
+    
+    checkModeSwitches();
 
     if (millis() - _lastSensorCheck > 1000) {
         readSensors();
@@ -102,7 +124,8 @@ void HardwareManager::updateActuators() {
 
 void HardwareManager::updateSolenoid() {
     #if ENABLE_SOLENOID
-    if (_actuatorState.solenoidActive && millis() >= _actuatorState.solenoidOffTime) {
+    if (_actuatorState.solenoidActive &&
+        (long)(millis() - _actuatorState.solenoidOffTime) >= 0) {
         digitalWrite(PIN_SOLENOID, LOW);
         _actuatorState.solenoidActive = false;
         LOG_PRINTLN("[HW] Solenoid pulse completed");
@@ -112,11 +135,11 @@ void HardwareManager::updateSolenoid() {
 
 void HardwareManager::updateLauncher() {
     #if ENABLE_LAUNCHER
-    if (_actuatorState.launcherActive && millis() >= _actuatorState.launcherOffTime) {
-        digitalWrite(PIN_LAUNCHER_1, LOW);
-        digitalWrite(PIN_LAUNCHER_2, LOW);
-        _actuatorState.launcherActive = false;
-        LOG_PRINTLN("[HW] Launcher fire pulse completed");
+    if (_actuatorState.launcherActive && _actuatorState.launcherEN2Pending &&
+        millis() - _actuatorState.launcherEN1OnTime >= LAUNCHER_EN2_DELAY_MS) {
+        digitalWrite(PIN_LAUNCHER_2, HIGH);
+        _actuatorState.launcherEN2Pending = false;
+        LOG_PRINTLN("[HW] Launcher EN_2 activated");
     }
     #endif
 }
@@ -219,6 +242,34 @@ void HardwareManager::readSensors() {
     // Si la batería es crítica -> xQueueSend(_fsmQueue, EVENT_BATTERY_CRITICAL...)
 }
 
+void HardwareManager::checkModeSwitches() {
+    // Leer estado actual de los pines
+    bool currentStateA = digitalRead(PIN_MODE_SWITCH_A);
+    bool currentStateM = digitalRead(PIN_MODE_SWITCH_M);
+    
+    // Detectar flanco en PIN_MODE_SWITCH_A
+    if (currentStateA != _modeSwitchState.prevStateA) {
+        if (currentStateA == HIGH) {
+            // Transición LOW -> HIGH: Modo ONLINE
+            Event evt = {EVENT_MODE_ONLINE_ACTIVATED, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            LOG_PRINTLN("[HW] Mode Switch A: ONLINE activated (LOW->HIGH)");
+        } else {
+            // Transición HIGH -> LOW: Modo OFFLINE
+            Event evt = {EVENT_MODE_OFFLINE_ACTIVATED, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            LOG_PRINTLN("[HW] Mode Switch A: OFFLINE activated (HIGH->LOW)");
+        }
+        _modeSwitchState.prevStateA = currentStateA;
+    }
+    
+    // Detectar flanco en PIN_MODE_SWITCH_M (si necesitas eventos para este también)
+    if (currentStateM != _modeSwitchState.prevStateM) {
+        // Agregar lógica aquí si PIN_MODE_SWITCH_M también debe generar eventos
+        _modeSwitchState.prevStateM = currentStateM;
+    }
+}
+
 
 /****************************************************************
  * INTERPRETACION DE COMANDOS
@@ -293,23 +344,28 @@ void HardwareManager::processCommand(HwMessage msg) {
             #endif
             break;
 
-        case CMD_SOLENOID_SINGLE_PULSE:
-            #if ENABLE_SOLENOID
-            fireSolenoid(msg.parameter > 0 ? msg.parameter : SOLENOID_PULSE_DURATION_MS);
-            #endif
-            break;
-
         // --- LAUNCHER CONTROL ---
         case CMD_LAUNCHER_ON:
             #if ENABLE_LAUNCHER
-            _actuatorState.launcherActive = true;
-            LOG_PRINTLN("[HW] Launcher powered ON");
+            // Solo inicia la secuencia si estaba apagado
+            if (!_actuatorState.launcherActive) {
+                digitalWrite(PIN_LAUNCHER_1, HIGH);
+                _actuatorState.launcherActive = true;
+                _actuatorState.launcherEN1OnTime = millis();
+                _actuatorState.launcherEN2Pending = true;
+                LOG_PRINTLN("[HW] Launcher ON: EN_1 activated");
+            } else {
+                LOG_PRINTLN("[HW] Launcher: Already active, ignoring CMD_LAUNCHER_ON");
+            }
             #endif
             break;
 
         case CMD_LAUNCHER_OFF:
             #if ENABLE_LAUNCHER
+            digitalWrite(PIN_LAUNCHER_1, LOW);
+            digitalWrite(PIN_LAUNCHER_2, LOW);
             _actuatorState.launcherActive = false;
+            _actuatorState.launcherEN2Pending = false;
             LOG_PRINTLN("[HW] Launcher powered OFF");
             #endif
             break;
@@ -344,12 +400,10 @@ void HardwareManager::disableTag() {
 
 void HardwareManager::fireSolenoid(unsigned long durationMs) {
     #if ENABLE_SOLENOID
-    if (!_actuatorState.solenoidActive) {
-        digitalWrite(PIN_SOLENOID, HIGH);
-        _actuatorState.solenoidActive = true;
-        _actuatorState.solenoidOffTime = millis() + durationMs;
-        LOG_PRINTF("[HW] Solenoid fire initiated (duration: %lu ms)\n", durationMs);
-    }
+    digitalWrite(PIN_SOLENOID, HIGH);
+    _actuatorState.solenoidActive = true;
+    _actuatorState.solenoidOffTime = millis() + durationMs;
+    LOG_PRINTF("[HW] Solenoid fire initiated (duration: %lu ms)\n", durationMs);
     #endif
 }
 
@@ -416,16 +470,16 @@ void HardwareManager::stopLedSequence() {
 Event HardwareManager::enterLightSleep() {
     // 1. CONFIGURACIÓN (Hardware Specific)
     // Aseguramos que el pin esté listo para leer
-    pinMode(PIN_MODE_SWITCH, INPUT_PULLUP); // Ajustar PCB
+    pinMode(PIN_MODE_SWITCH_A, INPUT_PULLUP); // Ajustar PCB
     
     // Lógica para despertar con el flanco contrario
-    int currentState = digitalRead(PIN_MODE_SWITCH);
+    int currentState = digitalRead(PIN_MODE_SWITCH_A);
     gpio_int_type_t wakeupLevel = (currentState == HIGH) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL;
 
     
 
     // API específica de ESP32
-    gpio_wakeup_enable((gpio_num_t)PIN_MODE_SWITCH, wakeupLevel);
+    gpio_wakeup_enable((gpio_num_t)PIN_MODE_SWITCH_A, wakeupLevel);
     esp_sleep_enable_gpio_wakeup();
 
     LOG_PRINTLN("HW: Entering Light Sleep...");
@@ -448,7 +502,7 @@ Event HardwareManager::enterLightSleep() {
     LOG_PRINTLN("HW: Woke up!");
 
     // 3. Estado de arranque    
-    bool isNowOnline = digitalRead(PIN_MODE_SWITCH) == LOW; // Asumiendo LOW = ON (Pullup)
+    bool isNowOnline = digitalRead(PIN_MODE_SWITCH_A) == LOW; // Asumiendo LOW = ON (Pullup)
     
     // Construimos el evento agnóstico
     Event ev;
@@ -468,4 +522,14 @@ void HardwareManager::prepareForWakeUp() {
     
     // 2. Reactivar interrupciones o lógica de entrada
     LOG_PRINTLN("HW: Wakeup sources disabled. Ready for activity.");
+}
+
+int HardwareManager::getBatteryPercentage() {
+    if (!_batteryMonitor.isInitialized()) {
+        LOG_PRINTLN("[HW] Battery Monitor not initialized");
+        return -1;
+    }
+    
+    BatteryInfo info = _batteryMonitor.getInfo();
+    return info.percentage;
 }

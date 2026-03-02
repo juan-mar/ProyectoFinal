@@ -10,7 +10,9 @@
  * PIN CONFIGURATION 
  ****************************************************************/
 // --- Mode Switch (Physical Button) ---
-#define PIN_MODE_SWITCH 13
+#define PIN_MODE_SWITCH_A 13
+#define PIN_MODE_SWITCH_M 14
+
 
 // --- Tag Reader (BLE) ---
 //#define PIN_TAG_POWER 32
@@ -28,12 +30,20 @@
 #define PIN_LAUNCHER_1 33     // Pin para iniciar el lanzador - Banco de capacitores
 #define PIN_LAUNCHER_2 32     // Pin para iniciar el lanzador - Banco de capacitores
 
+// --- Environmental Sensor (BME280) ---
+#define PIN_BME_SDA 21
+#define PIN_BME_SCL 22
+
 // --- LED Control ---
 #define PIN_LED_CONTROL 25
 
 #define PWM_CHANNEL_LED 0
 #define PWM_FREQUENCY_LED 1000     // Hz
 #define PWM_BIT_WIDTH_LED 8         // 0-255
+
+// --- Battery Monitor ---
+#define PIN_BATTERY 39              // ADC pin para lectura de voltaje de batería
+#define BATTERY_MULTIPLIER 2.0      // Divisor de voltaje: 2.0 = (R1+R2)/R2
 
 /****************************************************************
  * TIMING CONSTANTS
@@ -58,7 +68,7 @@
  * @brief Secuencia de inicio y disparo
  */
 #define SOLENOID_PULSE_DURATION_MS 200
-#define LAUNCHER_FIRE_DURATION_MS 150
+#define LAUNCHER_EN2_DELAY_MS 50
 
 /****************************************************************
  * LED SEQUENCE PATTERNS
@@ -96,10 +106,11 @@
  * Para compilación condicional en diferentes variantes
  */
 #define ENABLE_TAG_READER 1
-#define ENABLE_REMOTE_CONTROL 1
+#define ENABLE_REMOTE_CONTROL 0
 #define ENABLE_LED_CONTROL 0
 #define ENABLE_SOLENOID 1
 #define ENABLE_LAUNCHER 1
 #define ENABLE_BLE_SCANNER 1
+#define ENABLE_BATTERY_MONITOR 1
 
 #endif // HARDWARE_CONFIG_H

@@ -18,6 +18,7 @@
 class DataManager;
 class StateManager;
 class TrainingSession;
+class HardwareManager;
 
 // --- Class Definition ---
 class WebServerManager {
@@ -50,11 +51,13 @@ public:
 
     void setDataManager(DataManager* dm);
     void setStateManager(StateManager* sm);
+    void setHardwareManager(HardwareManager* hw);
 
 private:
     // --- Dependencies ---
     DataManager* dataManager;
     StateManager* stateManager;
+    HardwareManager* hardwareManager;
     TrainingSession* targetSession;
 
     // --- Network Objects ---

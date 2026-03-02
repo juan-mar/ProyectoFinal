@@ -10,6 +10,7 @@
 #include "RemoteControl.h"          // Tu driver de NRF24
 #include "HardwareConfig.h"         // Configuración centralizada de pines
 #include "rx.h"                     // Tu nuevo driver de BLE
+#include "BatteryMonitor.h"         // Battery monitoring
 
 /****************************************************************
  * @brief Hardware Command Types
@@ -37,16 +38,12 @@ enum HwCmdType {
     
     // --- Solenoid / Reward Dispenser ---
     CMD_SOLENOID_FIRE,              // Disparar solenoide (entregar reward)
-    CMD_SOLENOID_SINGLE_PULSE,      // Un pulso corto (parameter: duración ms)
     
     // --- Launcher Control ---
     CMD_LAUNCHER_ON,                // Encender lanzador (pin digital)
     CMD_LAUNCHER_OFF,               // Apagar lanzador
-    CMD_LAUNCHER_FIRE,              // Disparar pelota (envía pulso)
     
-    // --- Gestión de Energía / Drivers ---
-    //CMD_ENABLE_BLE,                 // Iniciar escaneo BLE
-    //CMD_DISABLE_BLE                 // Detener escaneo BLE
+
 };
 
 #define CMD_TAG_PARAM_CALIBRATION   1
@@ -100,6 +97,12 @@ public:
     //Constantes Publicas
     static const uint32_t LOOP_PERIOD_MS = 20;
 
+    /**
+     * @brief Obtiene el porcentaje actual de batería.
+     * @return Porcentaje de batería (0-100), o -1 si no está inicializado.
+     */
+    int getBatteryPercentage();
+
 private:
     // Colas
     QueueHandle_t _fsmQueue;       // Salida -> FSM
@@ -108,6 +111,7 @@ private:
     // Drivers Internos
     RemoteControl _remoteControl;
     Receptor _bleScanner;
+    BatteryMonitor _batteryMonitor{PIN_BATTERY, BATTERY_MULTIPLIER};
 
     // --- Estado de Periféricos ---
     struct PeripheralState {
@@ -115,13 +119,20 @@ private:
         bool remoteEnabled;         // Remote NRF24 on/off
     } _peripheralState;
 
+    // --- Estado de Mode Switches ---
+    struct ModeSwitchState {
+        bool prevStateA;            // Estado anterior PIN_MODE_SWITCH_A
+        bool prevStateM;            // Estado anterior PIN_MODE_SWITCH_M
+    } _modeSwitchState;
+
     // --- Estado de Actuadores ---
     struct ActuatorState {
         bool solenoidActive;        // Solenoide disparándose
         unsigned long solenoidOffTime;  // Cuándo apagar el solenoide
         
         bool launcherActive;        // Lanzador encendido
-        unsigned long launcherOffTime;  // Cuándo apagar el lanzador
+        unsigned long launcherEN1OnTime; // Cuándo se encendió EN_1
+        bool launcherEN2Pending;    // Espera para encender EN_2
         
         LedPattern currentLedPattern;   // Patrón LED actual
         bool ledSequenceRunning;    // Secuencia de LEDs en curso
@@ -147,6 +158,9 @@ private:
     void update_tag();
     void update_remote();
     
+    // --- Mode Switches
+    void checkModeSwitches();
+    
     // --- Sensors
     void readSensors();            // Batería, Temperatura
 
@@ -155,7 +169,6 @@ private:
     void enableTag(bool mode = false);  // mode: false=detección, true=calibración
     void disableTag();
     void fireSolenoid(unsigned long durationMs = SOLENOID_PULSE_DURATION_MS);
-    void fireLauncher(unsigned long durationMs = LAUNCHER_FIRE_DURATION_MS);
     void setLedPattern(LedPattern pattern);
     void startLedSequence(LedPattern pattern, unsigned long blinkRate);
     void stopLedSequence();

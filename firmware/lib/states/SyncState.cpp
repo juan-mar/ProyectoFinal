@@ -243,7 +243,8 @@ SyncState::SyncState(DataManager* dataManager, SupabaseClient* supabaseClient)
 void SyncState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering SyncState... Launching background task.");
     //Send CMD
-    //manager->getUserInterface()->setLedPattern(LED_SYNCING);    
+    manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_OFF, 0);
+
     g_cancelSync = false; // Resetea la bandera de cancelación
 
     static SyncTaskParams params; 

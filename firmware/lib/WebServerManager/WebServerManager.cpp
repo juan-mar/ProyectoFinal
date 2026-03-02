@@ -7,12 +7,13 @@
 #include "TrainingSession.h"
 #include "DataManager.h"
 #include "StateManager.h"
+#include "HardwareManager.h"
 #include "Events.h"
 #include "config.h"
 
 // --- Constructor ---
 WebServerManager::WebServerManager() 
-    : dataManager(nullptr), stateManager(nullptr), server(nullptr), dnsServer(nullptr)
+    : dataManager(nullptr), stateManager(nullptr), hardwareManager(nullptr), server(nullptr), dnsServer(nullptr)
 {
     // Nothing else to init here
 }
@@ -86,6 +87,10 @@ void WebServerManager::setDataManager(DataManager* dm) {
 
 void WebServerManager::setStateManager(StateManager* sm) {
     this->stateManager = sm;
+}
+
+void WebServerManager::setHardwareManager(HardwareManager* hw) {
+    this->hardwareManager = hw;
 }
 
 // --- Private: Setup Routes ---
@@ -180,9 +185,13 @@ void WebServerManager::handleApiGetStatus(AsyncWebServerRequest *request) {
     doc["storage_percent"] = (total > 0) ? (int)((used * 100) / total) : 0;
     doc["device_code"] = dataManager->getDeviceID();
     
-    // TODO: Leer batería real del UI
-    // doc["battery"] = userInterface->getBatteryPercentage(); 
-    doc["battery"] = 100; // Mockup por ahora
+    // Leer batería real del HardwareManager
+    if (hardwareManager != nullptr) {
+        int batteryPercent = hardwareManager->getBatteryPercentage();
+        doc["battery"] = (batteryPercent >= 0) ? batteryPercent : 0;
+    } else {
+        doc["battery"] = 0;  // Fallback si HardwareManager no está disponible
+    }
 
     String response;
     serializeJson(doc, response);
