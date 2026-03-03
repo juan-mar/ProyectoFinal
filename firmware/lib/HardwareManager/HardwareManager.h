@@ -129,6 +129,8 @@ private:
     struct ActuatorState {
         bool solenoidActive;        // Solenoide disparándose
         unsigned long solenoidOffTime;  // Cuándo apagar el solenoide
+        bool solenoidCooldownActive; // Cooldown activo para bloquear re-disparo
+        unsigned long solenoidCooldownStartMs; // Inicio del cooldown
         
         bool launcherActive;        // Lanzador encendido
         unsigned long launcherEN1OnTime; // Cuándo se encendió EN_1

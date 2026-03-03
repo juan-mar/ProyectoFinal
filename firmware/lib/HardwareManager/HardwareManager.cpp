@@ -16,6 +16,8 @@ HardwareManager::HardwareManager()
     // Inicializar estados de actuadores
     _actuatorState.solenoidActive = false;
     _actuatorState.solenoidOffTime = 0;
+    _actuatorState.solenoidCooldownActive = false;
+    _actuatorState.solenoidCooldownStartMs = 0;
     _actuatorState.launcherActive = false;
     _actuatorState.launcherEN1OnTime = 0;
     _actuatorState.launcherEN2Pending = false;
@@ -400,10 +402,25 @@ void HardwareManager::disableTag() {
 
 void HardwareManager::fireSolenoid(unsigned long durationMs) {
     #if ENABLE_SOLENOID
+    unsigned long now = millis();
+
+    if (_actuatorState.solenoidCooldownActive) {
+        unsigned long elapsedCooldown = now - _actuatorState.solenoidCooldownStartMs;
+        if (elapsedCooldown < SOLENOID_COOLDOWN_MS) {
+            unsigned long remainingMs = SOLENOID_COOLDOWN_MS - elapsedCooldown;
+            LOG_PRINTF("[HW] Solenoid fire ignored (cooldown active, %lu ms remaining)\n", remainingMs);
+            return;
+        }
+
+        _actuatorState.solenoidCooldownActive = false;
+    }
+
     digitalWrite(PIN_SOLENOID, HIGH);
     _actuatorState.solenoidActive = true;
-    _actuatorState.solenoidOffTime = millis() + durationMs;
-    LOG_PRINTF("[HW] Solenoid fire initiated (duration: %lu ms)\n", durationMs);
+    _actuatorState.solenoidOffTime = now + durationMs;
+    _actuatorState.solenoidCooldownActive = true;
+    _actuatorState.solenoidCooldownStartMs = now;
+    LOG_PRINTF("[HW] Solenoid fire initiated (duration: %lu ms, cooldown: %lu ms)\n", durationMs, (unsigned long)SOLENOID_COOLDOWN_MS);
     #endif
 }
 

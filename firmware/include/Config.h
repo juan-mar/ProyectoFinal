@@ -24,7 +24,7 @@
  * When set to 0, all LOG_... macros are compiled out,
  * saving flash space and execution time.
  */
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 #define PIN_DEBUG_MODE 1
 /****************************************************************
  * Logger Macros (The smart part)

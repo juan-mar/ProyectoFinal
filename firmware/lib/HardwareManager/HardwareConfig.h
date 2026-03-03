@@ -68,6 +68,7 @@
  * @brief Secuencia de inicio y disparo
  */
 #define SOLENOID_PULSE_DURATION_MS 200
+#define SOLENOID_COOLDOWN_MS 40000
 #define LAUNCHER_EN2_DELAY_MS 50
 
 /****************************************************************
@@ -106,7 +107,7 @@
  * Para compilación condicional en diferentes variantes
  */
 #define ENABLE_TAG_READER 1
-#define ENABLE_REMOTE_CONTROL 0
+#define ENABLE_REMOTE_CONTROL 1
 #define ENABLE_LED_CONTROL 0
 #define ENABLE_SOLENOID 1
 #define ENABLE_LAUNCHER 1

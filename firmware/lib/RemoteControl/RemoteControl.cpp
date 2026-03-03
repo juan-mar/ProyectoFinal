@@ -23,8 +23,8 @@ int RemoteControl::checkForCommand() {
 
             // ACÁ DEPENDE DE QUÉ TEXTO MANDE TU CONTROL REMOTO (TX)
             // Asumo unos textos de ejemplo, cambialos por los tuyos:
-            if (msg == "BIEN") return CMD_REMOTE_SUCCESS;
-            if (msg == "MAL")  return CMD_REMOTE_FAIL;
+            if (msg == "BTN1") return CMD_REMOTE_SUCCESS;
+            if (msg == "BTN2")  return CMD_REMOTE_FAIL;
             if (msg == "FIN")  return CMD_REMOTE_EXIT;
         }
     }
