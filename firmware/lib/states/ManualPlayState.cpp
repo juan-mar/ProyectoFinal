@@ -94,13 +94,13 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_TRAINING_SUCCESS:
             LOG_PRINTLN("[Manual] Procesando ÉXITO. Disparando premio...");
             manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE, 0);
-            saveRun("success");
+            saveRun(manager, "success");
             break;
 
         // --- EVENTO 4: FALLO (Auto-disparado por el Botón "MAL") ---
         case EVENT_TRAINING_FAILED:
             LOG_PRINTLN("[Manual] Procesando FALLO...");
-            saveRun("fail");
+            saveRun(manager, "fail");
             break;
 
         // --- EVENTO 5: FIN DEL JUEGO (Control Remoto: Botón 3 o Mantener presionado) ---
@@ -136,10 +136,24 @@ void ManualPlayState::update(StateManager* manager) {
     }
 }
 
-void ManualPlayState::saveRun(const char* result) {
+void ManualPlayState::saveRun(StateManager* manager, const char* result) {
     if (currentSession == nullptr) return;
 
-    currentSession->setResult(result);    
+    currentSession->setResult(result);
+    
+    // Obtener datos ambientales del sensor
+    EnvData envData = manager->getHardwareManager()->getEnvironmentData();
+    
+    if (envData.valid) {
+        // Crear JSON string con los datos ambientales
+        String conditionsJson = "{\"temp\":" + String(envData.temperature, 1) + 
+                                ",\"humidity\":" + String(envData.humidity, 1) + 
+                                ",\"pressure\":" + String(envData.pressure, 1) + "}";
+        currentSession->setConditions(conditionsJson);
+        LOG_PRINTF("[Manual] Condiciones ambientales: %s\n", conditionsJson.c_str());
+    } else {
+        LOG_PRINTLN("[Manual] WARNING: Sensor ambiental no válido");
+    }
     
     // 2. Serializar y Guardar en LittleFS
     String json;

@@ -11,6 +11,7 @@
 #include "HardwareConfig.h"         // Configuración centralizada de pines
 #include "rx.h"                     // Tu nuevo driver de BLE
 #include "BatteryMonitor.h"         // Battery monitoring
+#include "EnvironmentSensor.h"      // BME280 environment sensor
 
 /****************************************************************
  * @brief Hardware Command Types
@@ -103,6 +104,12 @@ public:
      */
     int getBatteryPercentage();
 
+    /**
+     * @brief Obtiene las lecturas actuales del sensor ambiental.
+     * @return Estructura EnvData con temperatura, humedad, presión y flag de validez.
+     */
+    EnvData getEnvironmentData();
+
 private:
     // Colas
     QueueHandle_t _fsmQueue;       // Salida -> FSM
@@ -112,6 +119,7 @@ private:
     RemoteControl _remoteControl;
     Receptor _bleScanner;
     BatteryMonitor _batteryMonitor{PIN_BATTERY, BATTERY_MULTIPLIER};
+    EnvironmentSensor _environmentSensor;
 
     // --- Estado de Periféricos ---
     struct PeripheralState {

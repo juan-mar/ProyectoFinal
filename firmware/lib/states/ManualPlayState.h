@@ -43,7 +43,7 @@ private:
 
     
     // Helper para guardar y limpiar
-    void saveRun(const char* result);
+    void saveRun(StateManager* manager, const char* result);
 };
 
 #endif // MANUAL_PLAY_STATE_H

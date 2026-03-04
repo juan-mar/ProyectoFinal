@@ -77,6 +77,13 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     }
     #endif
     
+    // Init Environment Sensor (BME280)
+    if (_environmentSensor.init()) {
+        LOG_PRINTLN("  - Environment Sensor (BME280) initialized");
+    } else {
+        LOG_PRINTLN("  - WARNING: Environment Sensor init failed");
+    }
+    
     // Init Mode Switch pins
     pinMode(PIN_MODE_SWITCH_A, INPUT_PULLUP);
     pinMode(PIN_MODE_SWITCH_M, INPUT_PULLUP);
@@ -240,8 +247,21 @@ void HardwareManager::update_tag() {
 
 void HardwareManager::readSensors() {
     // Leer Batería
-    // Leer BME280
-    // Si la batería es crítica -> xQueueSend(_fsmQueue, EVENT_BATTERY_CRITICAL...)
+    #if ENABLE_BATTERY_MONITOR
+    if (_batteryMonitor.isInitialized()) {
+        BatteryInfo info = _batteryMonitor.getInfo();
+        
+        // Si la batería es crítica, enviar evento a la FSM
+        if (info.percentage < 10 && info.percentage >= 0) {
+            LOG_PRINTF("[HW] WARNING: Battery critical: %d%%\n", info.percentage);
+            // Event evt = {EVENT_BATTERY_CRITICAL, info.percentage};
+            // xQueueSend(_fsmQueue, &evt, 0);
+        }
+    }
+    #endif
+    
+    // Leer BME280 - Los datos se obtienen bajo demanda con getEnvironmentData()
+    // No necesitamos hacer nada aquí, el sensor se lee cuando se solicita
 }
 
 void HardwareManager::checkModeSwitches() {
@@ -549,4 +569,8 @@ int HardwareManager::getBatteryPercentage() {
     
     BatteryInfo info = _batteryMonitor.getInfo();
     return info.percentage;
+}
+
+EnvData HardwareManager::getEnvironmentData() {
+    return _environmentSensor.getReadings();
 }

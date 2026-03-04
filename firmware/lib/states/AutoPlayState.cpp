@@ -74,7 +74,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
             if (internalState == DISPENSING_REWARD) {
                 LOG_PRINTLN("[Auto] Reward Dispensed! Game Over (Win).");
                 manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE);
-                saveRun("success");
+                saveRun(manager, "success");
                 changingState = true;
                 manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             }
@@ -83,7 +83,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_TRAINING_FAILED:
             if (internalState == TIMEOUT_FAIL) {
                 LOG_PRINTLN("[Auto] TIMEOUT FAIL. Game Over (Error).");
-                saveRun("fail");
+                saveRun(manager, "fail");
                 changingState = true;
                 manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             }
@@ -137,11 +137,25 @@ void AutoPlayState::update(StateManager* manager) {
     }
 }
 
-void AutoPlayState::saveRun(const char* result) {
+void AutoPlayState::saveRun(StateManager* manager, const char* result) {
     if (currentSession == nullptr) return;
     
     currentSession->setResult(result);
     currentSession->setDeviceCode(dataManager->getDeviceID());
+    
+    // Obtener datos ambientales del sensor
+    EnvData envData = manager->getHardwareManager()->getEnvironmentData();
+    
+    if (envData.valid) {
+        // Crear JSON string con los datos ambientales
+        String conditionsJson = "{\"temp\":" + String(envData.temperature, 1) + 
+                                ",\"humidity\":" + String(envData.humidity, 1) + 
+                                ",\"pressure\":" + String(envData.pressure, 1) + "}";
+        currentSession->setConditions(conditionsJson);
+        LOG_PRINTF("[Auto] Condiciones ambientales: %s\n", conditionsJson.c_str());
+    } else {
+        LOG_PRINTLN("[Auto] WARNING: Sensor ambiental no válido");
+    }
       
     String json;
     if (currentSession->serialize(json)) {

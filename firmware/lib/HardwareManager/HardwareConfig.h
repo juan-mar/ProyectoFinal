@@ -33,6 +33,7 @@
 // --- Environmental Sensor (BME280) ---
 #define PIN_BME_SDA 21
 #define PIN_BME_SCL 22
+#define BME280_ADDRESS 0x76         // Dirección I2C del BME280 (0x76 o 0x77)
 
 // --- LED Control ---
 #define PIN_LED_CONTROL 25

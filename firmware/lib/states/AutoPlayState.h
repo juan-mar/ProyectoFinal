@@ -40,7 +40,7 @@ private:
     unsigned long stateStartTime;     // Cuándo empezó el juego (para el Timeout global)
     unsigned long detectionStartTime; // Cuándo el perro entró a la zona
 
-    void saveRun(const char* result);
+    void saveRun(StateManager* manager, const char* result);
 };
 
 #endif // AUTO_PLAY_STATE_H
