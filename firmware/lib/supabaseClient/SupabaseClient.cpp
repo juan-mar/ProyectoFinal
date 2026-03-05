@@ -89,7 +89,7 @@ bool SupabaseClient::listDogs(String accessToken, String &outJsonString) {
 }
 
 
-bool SupabaseClient::recordTrainingBatch(String accessToken, String batchJsonString) {
+UploadResult SupabaseClient::recordTrainingBatch(String accessToken, String batchJsonString) {
     String url = supabaseUrl + "/rest/v1/rpc/record_training_batch";
 
     LOG_PRINTLN("\n--- ENVIANDO A SUPABASE ---");
@@ -104,19 +104,30 @@ bool SupabaseClient::recordTrainingBatch(String accessToken, String batchJsonStr
     String response = http.getString(); 
     int httpCode = http.POST(batchJsonString);
 
-    LOG_PRINTF("[Supabase] HTTP Code:");
-    LOG_PRINTLN(httpCode);
+    LOG_PRINTF("[Supabase] HTTP Code: %d\n", httpCode);
     LOG_PRINTLN("[Supabase] Respuesta del Servidor: " + response);
-    bool success = false;
     
-    // Para RPC de batch, 200 (OK) o 204 (No Content) son éxito
+    UploadResult result;
+    
     if (httpCode == 200 || httpCode == 204) {
-        success = true;
+        result = UPLOAD_SUCCESS;
+    } else if (httpCode == 400) {
+        result = UPLOAD_VALIDATION_ERROR;
+        LOG_PRINTLN("[Supabase] ERROR 400: Data validation error");
+    } else if (httpCode == 408) {
+        result = UPLOAD_TIMEOUT;
+        LOG_PRINTLN("[Supabase] ERROR 408: Request timeout");
+    } else if (httpCode == 500) {
+        result = UPLOAD_SERVER_ERROR;
+        LOG_PRINTLN("[Supabase] ERROR 500: Server error");
+    } else if (httpCode == 503) {
+        result = UPLOAD_UNAVAILABLE;
+        LOG_PRINTLN("[Supabase] ERROR 503: Service unavailable");
     } else {
-        LOG_PRINTF("SupabaseClient::recordBatch HTTP Error: %d\n", httpCode);
-        LOG_PRINTLN(http.getString());
+        result = UPLOAD_UNKNOWN_ERROR;
+        LOG_PRINTF("[Supabase] ERROR: Unknown HTTP code %d\n", httpCode);
     }
 
     http.end();
-    return success;
+    return result;
 }

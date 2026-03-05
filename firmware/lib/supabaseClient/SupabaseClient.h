@@ -18,6 +18,19 @@
 #include <HTTPClient.h>
 
 /****************************************************************
+ * Enums
+ ****************************************************************/
+
+enum UploadResult {
+    UPLOAD_SUCCESS = 0,       // HTTP 200/204
+    UPLOAD_VALIDATION_ERROR = 400,  // Bad Request (data validation error)
+    UPLOAD_TIMEOUT = 408,     // Request Timeout
+    UPLOAD_SERVER_ERROR = 500, // Server Error
+    UPLOAD_UNAVAILABLE = 503,  // Service Unavailable
+    UPLOAD_UNKNOWN_ERROR = -1  // Other error
+};
+
+/****************************************************************
  * Class Declarations
  ****************************************************************/
 
@@ -54,9 +67,9 @@ public:
      * @brief Calls the 'record_training_batch' RPC to upload sessions.
      * @param accessToken The valid JWT for the session.
      * @param batchJsonString The JSON string of the batch ({"p_items": [...]}).
-     * @return true if upload was successful (HTTP 200 or 204).
+     * @return UploadResult with HTTP code information.
      */
-    bool recordTrainingBatch(String accessToken, String batchJsonString);
+    UploadResult recordTrainingBatch(String accessToken, String batchJsonString);
 
 private:
     String supabaseUrl;

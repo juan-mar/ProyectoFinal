@@ -20,6 +20,30 @@
 #include <freertos/semphr.h>
 
 /****************************************************************
+ * Enums and Constants
+ ****************************************************************/
+
+/**
+ * @brief Result of session file validation.
+ */
+enum ValidationResult {
+    VALID,                  // File is valid, ready to upload
+    RECOVERABLE,            // File has invalid optional fields, can be cleaned
+    UNRECOVERABLE           // File has invalid critical fields, must be discarded
+};
+
+// Session validation limits
+#define MIN_SESSION_DURATION_S 5
+#define MAX_SESSION_DURATION_S 3600
+#define MAX_SESSION_TIMEOUT_S 7200
+#define MIN_VALID_TEMPERATURE_C -20.0f
+#define MAX_VALID_TEMPERATURE_C 50.0f
+#define MIN_VALID_HUMIDITY_PCT 0.0f
+#define MAX_VALID_HUMIDITY_PCT 100.0f
+#define MIN_VALID_PRESSURE_HPA 900.0f
+#define MAX_VALID_PRESSURE_HPA 1100.0f
+
+/****************************************************************
  * Class Declarations
  ****************************************************************/
 
@@ -137,6 +161,28 @@ public:
      * @return true if the /sessions directory exists and is not empty.
      */
     bool sessionFilesExist();
+
+    /**
+     * @brief Prints all session files to Serial for debugging.
+     * This will display the filename and JSON content of each saved training session.
+     */
+    void printAllSessionFiles();
+
+    /**
+     * @brief Validates a session file JSON and checks for critical fields.
+     * @param jsonContent The JSON string of the session file.
+     * @return VALID (ready to upload), RECOVERABLE (has invalid optional fields),
+     *         or UNRECOVERABLE (has invalid critical fields).
+     */
+    ValidationResult validateSessionFile(const String &jsonContent);
+
+    /**
+     * @brief Cleans invalid optional fields from a session file and re-saves it.
+     * Only call this if validateSessionFile() returned RECOVERABLE.
+     * @param filePath The path to the session file to clean.
+     * @return true if cleaned successfully.
+     */
+    bool cleanAndSaveSessionFile(String filePath);
 
     SemaphoreHandle_t getMutex();
 

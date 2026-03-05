@@ -68,7 +68,9 @@ void setup() {
     }
     LOG_PRINTLN("DataManager initialized.");
     // Verificar-Opcional: Guardar un ID por defecto si no existe
-    if (g_dataManager->getDeviceID() == "DEFAULT-000") {
+    String currentDeviceId = g_dataManager->getDeviceID();
+    currentDeviceId.trim();
+    if (currentDeviceId.length() == 0 || currentDeviceId == "DEFAULT-000") {
         LOG_PRINTLN("Device ID not set. Saving default ID: ESP32-001");
         g_dataManager->saveDeviceID("ESP32-001");
     }
@@ -147,6 +149,8 @@ void setup() {
 
     LOG_PRINTLN("\n--- Data Tests ---");
     LOG_PRINTLN(" 'p' -> print numero de trainings pendientes");
+    LOG_PRINTLN(" 'v' -> print contenido de TODOS los archivos guardados (DEBUG)");
+    LOG_PRINTLN(" 'V' -> Validate all session files and clean if needed (TEST)");
     LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
     LOG_PRINTLN(" 'l' -> List local dog_list.json content");
 
@@ -297,6 +301,50 @@ void loop() {
 
                 case 'p': // Status (Ver pendientes)
                     LOG_PRINTF("\n[Test] Pending Sessions: %d\n", g_dataManager->countPendingSessions());
+                break;
+
+                case 'v': // View all session files
+                    g_dataManager->printAllSessionFiles();
+                    sendEvent = false;
+                break;
+
+                case 'V': // Validate all session files (TEST)
+                    {
+                        LOG_PRINTLN("\n[Test] Validating all session files...");
+                        SemaphoreHandle_t mutex = g_dataManager->getMutex();
+                        if (xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE) {
+                            File root = g_dataManager->openSessionDirectory();
+                            if (root) {
+                                File file = root.openNextFile();
+                                int fileNum = 0;
+                                while (file) {
+                                    if (!file.isDirectory()) {
+                                        fileNum++;
+                                        String content = file.readString();
+                                        String path = file.path();
+                                        LOG_PRINTF("\nFile %d: %s\n", fileNum, path.c_str());
+                                        
+                                        ValidationResult result = g_dataManager->validateSessionFile(content);
+                                        if (result == VALID) {
+                                            LOG_PRINTLN("  Status: VALID");
+                                        } else if (result == RECOVERABLE) {
+                                            LOG_PRINTLN("  Status: RECOVERABLE");
+                                            if (g_dataManager->cleanAndSaveSessionFile(path)) {
+                                                LOG_PRINTLN("  Cleaned: YES");
+                                            }
+                                        } else if (result == UNRECOVERABLE) {
+                                            LOG_PRINTLN("  Status: UNRECOVERABLE");
+                                        }
+                                    }
+                                    file.close();
+                                    file = root.openNextFile();
+                                }
+                                root.close();
+                            }
+                            xSemaphoreGive(mutex);
+                        }
+                    }
+                    sendEvent = false;
                 break;
 
                 case 'l': // List Dogs (Ver archivo local)

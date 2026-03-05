@@ -13,6 +13,8 @@
 #include "config.h"
 #include "SyncState.h"
 
+#define MIN_MANUAL_SHOT_INTERVAL_S 40
+
 // Constructor actualizado con RemoteControl
 ManualPlayState::ManualPlayState(DataManager* dm, TrainingSession* session)
     : dataManager(dm), currentSession(session),changingState(false), 
@@ -140,6 +142,7 @@ void ManualPlayState::saveRun(StateManager* manager, const char* result) {
     if (currentSession == nullptr) return;
 
     currentSession->setResult(result);
+    currentSession->setDeviceCode(dataManager->getDeviceID());
     
     // Obtener datos ambientales del sensor
     EnvData envData = manager->getHardwareManager()->getEnvironmentData();
@@ -166,12 +169,18 @@ void ManualPlayState::saveRun(StateManager* manager, const char* result) {
     // 3. LIMPIAR PARA EL SIGUIENTE DISPARO
     currentSession->setResult("");
     
-    //Adelantamos el reloj base sumando la duración de esta ronda
+    // Adelantamos el reloj base con un mínimo entre disparos
     unsigned long now = millis();
-    int elapsedSeconds = (now - roundStartMillis) / 1000;
-    currentSession->addSecondsToTimeStamp(elapsedSeconds);
+    unsigned long rawElapsedMs = now - roundStartMillis;
+    int elapsedSeconds = rawElapsedMs / 1000;
+    int advanceSeconds = (elapsedSeconds < MIN_MANUAL_SHOT_INTERVAL_S)
+        ? MIN_MANUAL_SHOT_INTERVAL_S
+        : elapsedSeconds;
+    LOG_PRINTF("[Manual][Time] now=%lu roundStart=%lu elapsedMs=%lu elapsedS=%d minS=%d\n",
+               now, roundStartMillis, rawElapsedMs, elapsedSeconds, MIN_MANUAL_SHOT_INTERVAL_S);
+    currentSession->addSecondsToTimeStamp(advanceSeconds);
     
     roundStartMillis = millis();
-    
-    LOG_PRINTLN("[Manual] Reloj avanzado. Listo para el próximo tiro...");
+
+    LOG_PRINTF("[Manual] Reloj avanzado +%d s. Listo para el próximo tiro...\n", advanceSeconds);
 }

@@ -4,7 +4,7 @@
 #include <hal/uart_types.h> 
 
 HardwareManager::HardwareManager() 
-    : _lastSensorCheck(0), _bleScanner(MAC_ADDR) {
+    : _lastBatteryReading(0), _lastEnvironmentReading(0), _bleScanner(MAC_ADDR) {
     // Inicializar estados de periféricos
     _peripheralState.tagEnabled = false;
     _peripheralState.remoteEnabled = false;
@@ -18,9 +18,11 @@ HardwareManager::HardwareManager()
     _actuatorState.solenoidOffTime = 0;
     _actuatorState.solenoidCooldownActive = false;
     _actuatorState.solenoidCooldownStartMs = 0;
+    
     _actuatorState.launcherActive = false;
     _actuatorState.launcherEN1OnTime = 0;
     _actuatorState.launcherEN2Pending = false;
+
     _actuatorState.currentLedPattern = LED_OFF;
     _actuatorState.ledSequenceRunning = false;
     _actuatorState.ledBlinkRate = 1000;
@@ -78,19 +80,23 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #endif
     
     // Init Environment Sensor (BME280)
+    #if ENABLE_ENVIRONMENT_SENSOR
     if (_environmentSensor.init()) {
         LOG_PRINTLN("  - Environment Sensor (BME280) initialized");
     } else {
         LOG_PRINTLN("  - WARNING: Environment Sensor init failed");
     }
-    
+    #endif
+
     // Init Mode Switch pins
+    #if ENABLE_MODE_SWITCH
     pinMode(PIN_MODE_SWITCH_A, INPUT_PULLUP);
     pinMode(PIN_MODE_SWITCH_M, INPUT_PULLUP);
     _modeSwitchState.prevStateA = digitalRead(PIN_MODE_SWITCH_A);
     _modeSwitchState.prevStateM = digitalRead(PIN_MODE_SWITCH_M);
     LOG_PRINTLN("  - Mode Switch pins initialized");
-    
+    #endif
+
     LOG_PRINTLN("HardwareManager: Initialization complete");
 }
 
@@ -119,10 +125,7 @@ void HardwareManager::update() {
     
     checkModeSwitches();
 
-    if (millis() - _lastSensorCheck > 1000) {
-        readSensors();
-        _lastSensorCheck = millis();
-    }
+    readSensors();
 }
 
 void HardwareManager::updateActuators() {
@@ -246,22 +249,30 @@ void HardwareManager::update_tag() {
 }
 
 void HardwareManager::readSensors() {
-    // Leer Batería
+    unsigned long now = millis();
+    
+    // Leer Batería periódicamente (según BATTERY_READ_PERIOD_MS)
     #if ENABLE_BATTERY_MONITOR
-    if (_batteryMonitor.isInitialized()) {
-        BatteryInfo info = _batteryMonitor.getInfo();
-        
-        // Si la batería es crítica, enviar evento a la FSM
-        if (info.percentage < 10 && info.percentage >= 0) {
-            LOG_PRINTF("[HW] WARNING: Battery critical: %d%%\n", info.percentage);
-            // Event evt = {EVENT_BATTERY_CRITICAL, info.percentage};
-            // xQueueSend(_fsmQueue, &evt, 0);
+    if (now - _lastBatteryReading >= BATTERY_READ_PERIOD_MS) {
+        if (_batteryMonitor.isInitialized()) {
+            BatteryInfo info = _batteryMonitor.getInfo();
+            
+            // Si la batería es crítica, enviar evento a la FSM
+            if (info.percentage < 10 && info.percentage >= 0) {
+                LOG_PRINTF("[HW] WARNING: Battery critical: %d%%\n", info.percentage);
+                // Event evt = {EVENT_BATTERY_CRITICAL, info.percentage};
+                // xQueueSend(_fsmQueue, &evt, 0);
+            }
         }
+        _lastBatteryReading = now;
     }
     #endif
     
-    // Leer BME280 - Los datos se obtienen bajo demanda con getEnvironmentData()
-    // No necesitamos hacer nada aquí, el sensor se lee cuando se solicita
+    // Leer sensor ambiental BME280 periódicamente (según ENVIRONMENT_READ_PERIOD_MS)
+    if (now - _lastEnvironmentReading >= ENVIRONMENT_READ_PERIOD_MS) {
+        _environmentSensor.updateReadings();
+        _lastEnvironmentReading = now;
+    }
 }
 
 void HardwareManager::checkModeSwitches() {
@@ -572,5 +583,5 @@ int HardwareManager::getBatteryPercentage() {
 }
 
 EnvData HardwareManager::getEnvironmentData() {
-    return _environmentSensor.getReadings();
+    return _environmentSensor.getLastValidReadings();
 }

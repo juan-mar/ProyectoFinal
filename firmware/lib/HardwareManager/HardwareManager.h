@@ -97,6 +97,8 @@ public:
 
     //Constantes Publicas
     static const uint32_t LOOP_PERIOD_MS = 20;
+    static const uint32_t BATTERY_READ_PERIOD_MS = 5000;      // Leer batería cada ~5 segundos
+    static const uint32_t ENVIRONMENT_READ_PERIOD_MS = 60000;  // Leer sensor ambiental cada ~60 segundos
 
     /**
      * @brief Obtiene el porcentaje actual de batería.
@@ -152,7 +154,8 @@ private:
     } _actuatorState;
 
     // --- Timing ---
-    unsigned long _lastSensorCheck;
+    unsigned long _lastBatteryReading;      // Último tiempo de lectura de batería
+    unsigned long _lastEnvironmentReading;  // Último tiempo de lectura de sensor ambiental
 
     // Métodos Privados de ayuda
     void processCommand(HwMessage msg);

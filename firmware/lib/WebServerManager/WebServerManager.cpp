@@ -244,6 +244,7 @@ void WebServerManager::handleApiPostStart(AsyncWebServerRequest *request, uint8_
         this->targetSession->setDogCode(dogCode);
         this->targetSession->setDuration(durationS);
         this->targetSession->setTimeout(timeoutS);
+        this->targetSession->setDeviceCode(dataManager->getDeviceID());
 
         if (strlen(timestamp) > 0) this->targetSession->setStartedAt(timestamp);
 
