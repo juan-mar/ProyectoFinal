@@ -46,6 +46,7 @@ public:
     // --- Getters ---
     int getDuration();
     int getTimeout();
+    String getStartedAt();
 
     // --- timers
     void addSecondsToTimeStamp(int seconds);

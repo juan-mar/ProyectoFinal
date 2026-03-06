@@ -12,6 +12,7 @@
 #include "Events.h"
 #include "Config.h"
 #include "HardwareManager.h"
+#include "EventLogger.h"
 
 // States we can transition to
 #include "ConfigState.h"
@@ -42,6 +43,7 @@ CalibrationState::CalibrationState(DataManager* dataManager, HardwareManager* ha
 
 void CalibrationState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering CalibrationState...");
+    EVENT_INFO("State Calibration entered");
 
     hardwareManager->sendCommand(CMD_TAG_POWER_ON, CMD_TAG_PARAM_CALIBRATION);
 
@@ -76,18 +78,21 @@ void CalibrationState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_CALIBRATION_COMPLETE:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Complete. Returning to ConfigState.");
+            EVENT_INFO("Calibration: EVENT_CALIBRATION_COMPLETE");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             changingState = true;
             break;
 
         case EVENT_CALIBRATION_CANCEL:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Cancelled. Returning to ConfigState.");
+            EVENT_WARN("Calibration: EVENT_CALIBRATION_CANCEL");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             changingState = true;
             break;
 
         case EVENT_CALIBRATION_FAILED:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Failed. Returning to ConfigState.");
+            EVENT_ERROR("Calibration: EVENT_CALIBRATION_FAILED");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             changingState = true;
             break;
@@ -106,6 +111,7 @@ void CalibrationState::update(StateManager* manager) {
     if (elapsedTime >= CALIBRATION_TIMEOUT_MS) {
         timeoutTriggered = true;
         LOG_PRINTLN("[CalibrationState] Calibration timeout! No completion within time limit.");
+        EVENT_ERROR("Calibration timeout reached");
         Event timeoutEvent;
         timeoutEvent.type = EVENT_CALIBRATION_FAILED;
         xQueueSend(manager->getEventQueue(), &timeoutEvent, 0);

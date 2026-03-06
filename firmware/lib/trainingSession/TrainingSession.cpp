@@ -34,6 +34,7 @@ void TrainingSession::setResult(String result) { p_result = result; }
 // --- Getters ---
 int TrainingSession::getDuration() { return p_duration_s; }
 int TrainingSession::getTimeout() { return p_timeout_s; }
+String TrainingSession::getStartedAt() { return p_started_at; }
 
 // --- Timers ---
 void TrainingSession::addSecondsToTimeStamp(int seconds) {

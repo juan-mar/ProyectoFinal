@@ -15,16 +15,20 @@
 #include "Credentials.h"
 #include "TrainingSession.h"
 #include "WebServerManager.h"
+#include "EventLogger.h"   // Event logging system
 
 
 /****************************************************************
  * Defines and Constants
  ****************************************************************/
-#define STATE_MANAGER_TASK_STACK_SIZE 4096 // 4KB stack for the FSM
+#define STATE_MANAGER_TASK_STACK_SIZE 8192 // 8KB stack for the FSM (increased for stability)
 #define STATE_MANAGER_TASK_PRIORITY 1      // Low priority
 
 #define UI_TASK_STACK_SIZE 2048 
 #define UI_TASK_PRIORITY 1
+
+#define EVENT_LOGGER_LCD_TASK_STACK_SIZE 2048
+#define EVENT_LOGGER_LCD_TASK_PRIORITY 0  // Very low priority
 
 /****************************************************************
  * Global Variables
@@ -34,6 +38,7 @@ DataManager* g_dataManager = nullptr;
 SupabaseClient* g_supabaseClient = nullptr;
 HardwareManager* g_hardwareManager = nullptr;
 WebServerManager* g_webServerManager = nullptr;
+EventLogger* g_eventLogger = nullptr;
 
 /****************************************************************
  * Task Function Prototypes
@@ -47,6 +52,14 @@ void stateManagerTask(void* parameter);
  * @brief The FreeRTOS task that runs the UserInterface (HW) updates.
  */
 void userInterfaceTask(void* parameter);
+
+#if EVENT_LOGGER_LCD_ENABLED
+/**
+ * @brief The FreeRTOS task that updates the LCD with event logs.
+ * Low priority, non-blocking.
+ */
+void eventLoggerLCDTask(void* parameter);
+#endif
 
 /****************************************************************
  * Setup Function
@@ -83,11 +96,19 @@ void setup() {
     g_hardwareManager = new HardwareManager();
     LOG_PRINTLN("UserInterface initialized.");
 
-    // 5. Create WebServerManager
+    // 5. Initialize EventLogger (before WebServer to log startup events)
+#if EVENT_LOGGER_ENABLED
+    g_eventLogger = EventLogger::getInstance();
+    g_eventLogger->begin();
+    LOG_PRINTLN("EventLogger initialized.");
+    EVENT_INFO("System boot started");
+#endif
+
+    // 6. Create WebServerManager
     g_webServerManager = new WebServerManager();
     LOG_PRINTLN("WebServerManager initialized.");
 
-    //6. Create StateManager and inject DataManager dependency
+    //7. Create StateManager and inject DataManager dependency
     g_stateManager = new StateManager(g_dataManager, g_supabaseClient, g_hardwareManager, g_webServerManager);
     LOG_PRINTLN("StateManager initialized. Starting FSM...");
 
@@ -95,10 +116,11 @@ void setup() {
     g_webServerManager->setStateManager(g_stateManager);
     g_webServerManager->setHardwareManager(g_hardwareManager);
     
-    g_stateManager->begin();
-    
-    // 7. Initialize UserInterface with FSM event queue
+    // 7. Initialize HardwareManager with FSM event queue BEFORE StateManager begins
+    // This ensures command queue is ready when PowerUpState::enter() sends CMD_LAUNCHER_ON
     g_hardwareManager->init(g_stateManager->getEventQueue());
+    
+    g_stateManager->begin();
 
     // 8. Create the StateManager's dedicated task
     xTaskCreate(
@@ -119,6 +141,19 @@ void setup() {
         UI_TASK_PRIORITY,               // Task priority
         NULL                            // Task handle
     );
+
+#if EVENT_LOGGER_LCD_ENABLED
+    // 10. Create EventLogger LCD task (if LCD is enabled)
+    xTaskCreate(
+        eventLoggerLCDTask,             // Task function
+        "EventLoggerLCD",               // Task name (for debugging)
+        EVENT_LOGGER_LCD_TASK_STACK_SIZE, // Stack size
+        NULL,                           // Task parameters
+        EVENT_LOGGER_LCD_TASK_PRIORITY, // Task priority (very low)
+        NULL                            // Task handle
+    );
+    LOG_PRINTLN("EventLogger LCD task created.");
+#endif
 
     LOG_PRINTLN("Setup complete. FSM task is running.");    
     // --- Instrucciones para el simulador ---
@@ -184,6 +219,24 @@ void userInterfaceTask(void* parameter) {
         vTaskDelay(HardwareManager::LOOP_PERIOD_MS / portTICK_PERIOD_MS);
     }
 }
+
+#if EVENT_LOGGER_LCD_ENABLED
+/****************************************************************
+ * EventLogger LCD Task
+ ****************************************************************/
+void eventLoggerLCDTask(void* parameter) {
+    // Update LCD with latest logs at 5 Hz
+    // This is a low-priority task that won't block critical operations
+    const TickType_t updateInterval = pdMS_TO_TICKS(200); // 200ms = 5 Hz
+    
+    while (true) {
+        if (g_eventLogger != nullptr) {
+            g_eventLogger->updateLCD();
+        }
+        vTaskDelay(updateInterval);
+    }
+}
+#endif
 
 /****************************************************************
  * Loop Function
@@ -294,7 +347,7 @@ void loop() {
                     dummySession.setDeviceCode(g_dataManager->getDeviceID()); // Usa el ID real guardado
 
                     if (dummySession.serialize(jsonStr)) {
-                        g_dataManager->saveSessionFile(jsonStr);
+                        g_dataManager->saveSessionFile(jsonStr, dummySession.getStartedAt());
                         LOG_PRINTLN("[Test] Session saved to LittleFS.");
                     }
                 break;

@@ -9,9 +9,10 @@
 #include "StateManager.h" 
 #include "State.h"        
 #include "Config.h"
+#include "EventLogger.h"
 
 // Include the initial state
-#include "ConfigState.h"  
+#include "PowerUpState.h"  
 
 /****************************************************************
  * Defines and Constants
@@ -37,8 +38,9 @@ StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseCli
 void StateManager::begin() {
     // Currently, all initialization is done in the constructor
     LOG_PRINTLN("StateManager: FSM begun.");
-    // Set the initial state, injecting dependencies
-    currentState = new ConfigState(this->dataManager, this->ws);
+    EVENT_INFO("FSM started");
+    // Set the initial state to PowerUpState (launcher activation + stabilization)
+    currentState = new PowerUpState();
     
     if (currentState != nullptr) {
         currentState->enter(this);
@@ -70,6 +72,7 @@ void StateManager::execute() {
  * @brief Transitions the FSM to a new state.
  */
 void StateManager::changeState(State* newState) {
+    EVENT_INFO("FSM changeState requested");
     if (currentState != nullptr) {
         currentState->exit(this);
         delete currentState;
@@ -81,6 +84,7 @@ void StateManager::changeState(State* newState) {
         currentState->enter(this);
     } else {
          LOG_PRINTLN("ERROR: Attempted to change to a NULL state!");
+         EVENT_ERROR("FSM attempted NULL state transition");
     }
 }
 

@@ -4,7 +4,7 @@
 
 bool EnvironmentSensor::init() {
     // 0x76 o 0x77 son las direcciones comunes del BME280
-    if (!_bme.begin(BME280_ADDRESS)) {
+    if (!_bme.begin(ENV_BME280_I2C_ADDRESS)) {
         return false;
     }
     _initialized = true;

@@ -12,8 +12,9 @@
 #include "TrainingSession.h"
 #include "Events.h"
 #include "Config.h"
-#include "HardwareManager.h"
 #include "WebServerManager.h"
+#include "HardwareManager.h"
+#include "EventLogger.h"
 
 // States we can transition to
 #include "SyncState.h"
@@ -40,24 +41,28 @@ ConfigState::ConfigState(DataManager* dataManager, WebServerManager* webServer)
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
+    EVENT_INFO("State Config entered");
     PIN_MODE(2, OUTPUT); // Debug LED
     PIN_HIGH(2);          // Turn on debug LED
     changingState = false;
     this->sessionConfig = new TrainingSession();
     
+    // SOLUCIÓN 1: Reset WiFi to avoid mode conflicts from previous states
+    WiFi.mode(WIFI_OFF);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
 
     webServer->setTargetSession(this->sessionConfig);
-    webServer->begin(); //to avoid heap corruption with event queue
+    // NOTE: webServer->begin() is deferred to execute() for lazy initialization
+    // to avoid stack overflow during state entry. It's called on first execution.
 }
 
 void ConfigState::execute(StateManager* manager) {
-    // Lazy initialization of web server after queue is stable
+    // Lazy initialization of web server after queue is stable and task has proper stack
     if (!firstTime) {
+        LOG_PRINTLN("ConfigState: Initializing web server...");
         webServer->begin();
         firstTime = true;
-        LOG_PRINTLN("ConfigState: First in - Start Launcher");
-        manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_ON, 0);
-
+        LOG_PRINTLN("ConfigState: Web server started (launcher already active from PowerUpState)");
     }
 
     Event event;
@@ -90,12 +95,14 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
+            EVENT_INFO("Config: EVENT_MODE_ONLINE_ACTIVATED");
             changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
 
         case EVENT_START_CALIBRATION:
             LOG_PRINTLN("[ConfigState] Event: Start Calibration. Changing to CalibrationState.");
+            EVENT_INFO("Config: EVENT_START_CALIBRATION");
             this->sessionConfig = nullptr;
             changingState = true;
             manager->changeState(new CalibrationState(dataManager, manager->getHardwareManager()));
@@ -104,6 +111,7 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_START_MANUAL_PLAY:
         {
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
+            EVENT_INFO("Config: EVENT_START_MANUAL_PLAY");
             changingState = true;
             TrainingSession* sessionToPass = this->sessionConfig;            
             this->sessionConfig = nullptr; 
@@ -113,6 +121,7 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_START_AUTO_PLAY:
         {
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
+            EVENT_INFO("Config: EVENT_START_AUTO_PLAY");
             changingState = true;
             TrainingSession* sessionToPass = this->sessionConfig;            
             this->sessionConfig = nullptr; 

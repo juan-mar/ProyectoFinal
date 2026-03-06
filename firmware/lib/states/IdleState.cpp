@@ -12,11 +12,11 @@
 #include "Events.h"
 #include "config.h"
 #include "esp_sleep.h" // Required for light sleep functions
-#include "HardwareManager.h"
 #include "SupabaseClient.h"
+#include "HardwareManager.h"
 
 // States we can transition to
-#include "ConfigState.h"
+#include "PowerUpState.h"
 #include "SyncState.h"
 
 /****************************************************************
@@ -85,8 +85,8 @@ void IdleState::exit(StateManager* manager) {
 void IdleState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_OFFLINE_ACTIVATED:
-            LOG_PRINTLN("[IdleState] Event: Mode OFFLINE. Changing to ConfigState.");
-            manager->changeState(new ConfigState(manager->getDataManager(), manager->getWebServerManager()));
+            LOG_PRINTLN("[IdleState] Event: Mode OFFLINE. Changing to PowerUpState.");
+            manager->changeState(new PowerUpState());
             break;
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[IdleState] Event: Mode ONLINE. Changing to SyncState.");

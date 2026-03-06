@@ -138,9 +138,10 @@ public:
      * @brief Appends a single session (as a JSON string) to the log file.
      * This is THREAD-SAFE (uses a Mutex).
      * @param sessionJsonString The complete JSON string for the session.
+     * @param startedAt The ISO8601 timestamp to use as the filename (e.g., "2024-01-15T10:30:00.000Z").
      * @return true if append was successful.
      */
-    bool saveSessionFile(String sessionJsonString);
+    bool saveSessionFile(String sessionJsonString, String startedAt);
 
     /**
      * @brief Opens the session directory ("/sessions") for reading.

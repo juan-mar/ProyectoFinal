@@ -1,10 +1,18 @@
 #include "HardwareManager.h"
 #include "Config.h"
+#include "EventLogger.h"
 #include <driver/uart.h>
 #include <hal/uart_types.h> 
 
 HardwareManager::HardwareManager() 
     : _lastBatteryReading(0), _lastEnvironmentReading(0), _bleScanner(MAC_ADDR) {
+    // Inicializar queue de comandos (independiente del resto del sistema)
+    _commandQueue = xQueueCreate(HW_COMMAND_QUEUE_SIZE, sizeof(HwMessage));
+    if (_commandQueue == NULL) {
+        LOG_PRINTLN("FATAL: Could not create HardwareManager command queue!");
+        while(1);  // Halt
+    }
+    
     // Inicializar estados de periféricos
     _peripheralState.tagEnabled = false;
     _peripheralState.remoteEnabled = false;
@@ -12,6 +20,10 @@ HardwareManager::HardwareManager()
     // Inicializar estados de mode switches
     _modeSwitchState.prevStateA = false;
     _modeSwitchState.prevStateM = false;
+    
+    // Inicializar estados de control remoto (doble BTN1)
+    _remoteButtonState.btn1Pending = false;
+    _remoteButtonState.btn1FirstPressTime = 0;
     
     // Inicializar estados de actuadores
     _actuatorState.solenoidActive = false;
@@ -32,7 +44,6 @@ HardwareManager::HardwareManager()
 
 void HardwareManager::init(QueueHandle_t fsmQueue) {
     _fsmQueue = fsmQueue;
-    _commandQueue = xQueueCreate(HW_COMMAND_QUEUE_SIZE, sizeof(HwMessage));
 
     LOG_PRINTLN("HardwareManager: Initializing pins...");
 
@@ -65,8 +76,10 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #if ENABLE_REMOTE_CONTROL
     if (_remoteControl.init()) {
         LOG_PRINTLN("[Hardware] NRF24 Control Remoto inicializado OK.");
+        EVENT_INFO("HW remote initialized");
     } else {
         LOG_PRINTLN("[Hardware] ERROR: Falló el NRF24.");
+        EVENT_ERROR("HW remote init failed");
     }
     _peripheralState.remoteEnabled = false;
     #endif
@@ -83,8 +96,10 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #if ENABLE_ENVIRONMENT_SENSOR
     if (_environmentSensor.init()) {
         LOG_PRINTLN("  - Environment Sensor (BME280) initialized");
+        EVENT_INFO("HW environment sensor initialized");
     } else {
         LOG_PRINTLN("  - WARNING: Environment Sensor init failed");
+        EVENT_WARN("HW environment sensor init failed");
     }
     #endif
 
@@ -107,6 +122,7 @@ bool HardwareManager::sendCommand(HwCmdType cmd, int param) {
     
     if (!result) {
         LOG_PRINTF("[HW] WARNING: Command queue full! Dropped command: %d\n", cmd);
+        EVENT_WARN("HW command queue full");
     }
     
     return result;
@@ -180,28 +196,72 @@ void HardwareManager::checkDrivers() {
 }
 
 void HardwareManager::update_remote() {
+    unsigned long now = millis();
+    
+    // Verificar si expiró el tiempo de espera del BTN1
+    if (_remoteButtonState.btn1Pending) {
+        if (now - _remoteButtonState.btn1FirstPressTime >= _remoteButtonState.BTN1_DOUBLE_PRESS_WINDOW_MS) {
+            // Pasó 1 segundo, fue un BTN1 simple (ya procesado)
+            LOG_PRINTF("[HW][t=%lu] BTN1: Ventana de doble pulsación expiró (fue simple)\n", now);
+            _remoteButtonState.btn1Pending = false;
+        }
+    }
+    
     int remoteCmd = _remoteControl.checkForCommand();
     
     switch (remoteCmd) {
-        case CMD_REMOTE_SUCCESS:
+        case CMD_REMOTE_SUCCESS: // BTN1
         {
-            LOG_PRINTLN("[HW] Control Remoto: BIEN");
-            Event evt = {EVENT_DOG_DETECTED, 0};
-            xQueueSend(_fsmQueue, &evt, 0);
+            if (_remoteButtonState.btn1Pending) {
+                // ¡DOBLE PULSACIÓN DETECTADA!
+                unsigned long deltaMs = now - _remoteButtonState.btn1FirstPressTime;
+                LOG_PRINTF("[HW][t=%lu] *** DOBLE BTN1 DETECTADO (delta=%lums) -> FIN ENTRENAMIENTO ***\n", 
+                           now, deltaMs);
+                EVENT_INFO("Remote double BTN1 -> PLAY_FINISHED");
+                
+                // Resetear estado
+                _remoteButtonState.btn1Pending = false;
+                
+                // Enviar evento de FIN del entrenamiento
+                Event evt = {EVENT_PLAY_FINISHED, 0};
+                xQueueSend(_fsmQueue, &evt, 0);
+                
+            } else {
+                // Primera pulsación de BTN1
+                LOG_PRINTF("[HW][t=%lu] BTN1: Primera pulsación -> DETECTADO (esperando 1s para confirmar simple/doble)\n", now);
+                EVENT_INFO("Remote BTN1 -> DOG_DETECTED");
+                
+                _remoteButtonState.btn1Pending = true;
+                _remoteButtonState.btn1FirstPressTime = now;
+                
+                // Enviar evento inmediato a la FSM (el perro fue detectado)
+                Event evt = {EVENT_DOG_DETECTED, 0};
+                xQueueSend(_fsmQueue, &evt, 0);
+            }
             break;
         }
         
-        case CMD_REMOTE_FAIL:
+        case CMD_REMOTE_FAIL: // BTN2
         {
-            LOG_PRINTLN("[HW] Control Remoto: MAL");
+            LOG_PRINTF("[HW][t=%lu] BTN2 (MAL) -> DOG_LOST\n", now);
+            EVENT_WARN("Remote BTN2 -> DOG_LOST");
+            
+            // Cancelar cualquier BTN1 pendiente
+            _remoteButtonState.btn1Pending = false;
+            
             Event evt = {EVENT_DOG_LOST, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             break;
         }
         
-        case CMD_REMOTE_EXIT:
+        case CMD_REMOTE_EXIT: // FIN
         {
-            LOG_PRINTLN("[HW] Control Remoto: FIN");
+            LOG_PRINTF("[HW][t=%lu] FIN (Control Remoto) -> PLAY_FINISHED\n", now);
+            EVENT_INFO("Remote FIN -> PLAY_FINISHED");
+            
+            // Cancelar cualquier BTN1 pendiente
+            _remoteButtonState.btn1Pending = false;
+            
             Event evt = {EVENT_PLAY_FINISHED, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             break;
@@ -221,6 +281,7 @@ void HardwareManager::update_tag() {
         case CALIB_OK:
         {
             LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
+            EVENT_INFO("BLE calibration OK");
             //SEND EVENT TO FSM IF NEEDED
             Event ev;
             ev.type = EVENT_CALIBRATION_COMPLETE;
@@ -230,6 +291,7 @@ void HardwareManager::update_tag() {
         case DETECT_FAIL: //buscando can - fuera de zona
         {
             LOG_PRINTLN("[HW] BLE Scanner: LOST!");
+            EVENT_WARN("BLE DETECT_FAIL -> DOG_LOST");
             Event ev;
             ev.type = EVENT_DOG_LOST;
             xQueueSend(_fsmQueue, &ev, 0);
@@ -238,6 +300,7 @@ void HardwareManager::update_tag() {
         case DETECT_OK: //can dectectado - entró a zona
         {
             LOG_PRINTLN("[HW] BLE Scanner: DETECTED!");
+            EVENT_INFO("BLE DETECT_OK -> DOG_DETECTED");
             Event ev;
             ev.type = EVENT_DOG_DETECTED;
             xQueueSend(_fsmQueue, &ev, 0);

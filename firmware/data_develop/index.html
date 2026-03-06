@@ -14,6 +14,12 @@
             <span>📱 <span id="device-code">--</span></span>
         </div>
         <h2>🐶 Configurar Sesión</h2>
+        
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('config', this)">⚙️ Configuración</button>
+            <button class="tab-btn" onclick="showTab('logs', this)">📋 Logs</button>
+        </div>
     </header>
 
     <div id="overlay" class="overlay hidden">
@@ -24,7 +30,8 @@
         </div>
     </div>
 
-    <main>
+    <!-- Config Tab Content -->
+    <main id="tab-config" class="tab-content active">
         <div class="card">
             <label>Seleccionar Perro:</label>
             <select id="dogSelector">
@@ -84,6 +91,38 @@
         
         <p id="status-msg"></p>
     </main>
+
+    <!-- Logs Tab Content -->
+    <div id="tab-logs" class="tab-content">
+        <div class="card">
+            <div class="logs-header">
+                <h3>📋 Registro de Eventos</h3>
+                <div class="logs-controls">
+                    <button class="btn-small" onclick="refreshLogs()">🔄 Actualizar</button>
+                    <button class="btn-small" onclick="clearLogsDisplay()">🗑️ Limpiar</button>
+                    <label class="filter-label">
+                        Filtro:
+                        <select id="logLevelFilter" onchange="filterLogs()">
+                            <option value="ALL">Todos</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARN">WARN</option>
+                            <option value="ERROR">ERROR</option>
+                        </select>
+                    </label>
+                    <label class="auto-refresh">
+                        <input type="checkbox" id="autoRefreshCheckbox" checked onchange="toggleAutoRefresh()">
+                        Auto (5s)
+                    </label>
+                </div>
+            </div>
+            <div id="logs-container" class="logs-container">
+                <div class="log-placeholder">Cargando logs...</div>
+            </div>
+            <div class="logs-footer">
+                <span id="log-count">0 eventos</span>
+            </div>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>

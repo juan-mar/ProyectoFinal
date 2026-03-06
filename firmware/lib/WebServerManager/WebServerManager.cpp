@@ -10,6 +10,7 @@
 #include "HardwareManager.h"
 #include "Events.h"
 #include "config.h"
+#include "EventLogger.h"
 
 // --- Constructor ---
 WebServerManager::WebServerManager() 
@@ -117,6 +118,10 @@ void WebServerManager::setupRoutes() {
 
     server->on("/api/calibrate", HTTP_POST, [this](AsyncWebServerRequest *request) {
         this->handleApiPostCalibrate(request);
+    });
+
+    server->on("/api/logs", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        this->handleApiGetLogs(request);
     });
 
     // ==========================================
@@ -292,4 +297,29 @@ void WebServerManager::handleApiPostCalibrate(AsyncWebServerRequest *request) {
         LOG_PRINTLN("WS Error: StateManager is null!");
         request->send(500, "application/json", "{\"status\":\"error\",\"msg\":\"StateManager not initialized\"}");
     }
+}
+
+void WebServerManager::handleApiGetLogs(AsyncWebServerRequest *request) {
+#if EVENT_LOGGER_WEB_ENABLED
+    // Get max entries parameter (optional)
+    uint16_t maxEntries = 100; // Default
+    if (request->hasParam("max")) {
+        String maxStr = request->getParam("max")->value();
+        maxEntries = maxStr.toInt();
+        if (maxEntries == 0 || maxEntries > 500) {
+            maxEntries = 100; // Clamp to reasonable range
+        }
+    }
+    
+    // Get logs from EventLogger singleton
+    EventLogger* logger = EventLogger::getInstance();
+    if (logger != nullptr) {
+        String json = logger->getLogsJSON(maxEntries);
+        request->send(200, "application/json", json);
+    } else {
+        request->send(500, "application/json", "{\"error\":\"Logger not initialized\"}");
+    }
+#else
+    request->send(501, "application/json", "{\"error\":\"Event logging disabled\"}");
+#endif
 }

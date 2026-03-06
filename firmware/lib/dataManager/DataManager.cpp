@@ -184,10 +184,16 @@ String DataManager::readDogList() {
     return content;
 }
 
-bool DataManager::saveSessionFile(String sessionJsonString) {
+bool DataManager::saveSessionFile(String sessionJsonString, String startedAt) {
     bool success = false;
     
-    String path = String(DIR_SESSIONS) + "/" + String(millis()) + ".json";
+    // Sanitizar el timestamp para usarlo como nombre de archivo
+    // Convertir "2024-01-15T10:30:00.000Z" a "2024-01-15T10-30-00-000Z"
+    String sanitizedName = startedAt;
+    sanitizedName.replace(":", "-");
+    sanitizedName.replace(".", "-");
+    
+    String path = String(DIR_SESSIONS) + "/" + sanitizedName + ".json";
 
     if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
         LOG_PRINTF("DataManager: Got mutex, saving session to: %s\n", path.c_str());

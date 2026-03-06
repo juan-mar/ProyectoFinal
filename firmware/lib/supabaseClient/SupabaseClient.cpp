@@ -32,6 +32,7 @@ bool SupabaseClient::login(String email, String password, String &outAccessToken
     serializeJson(doc, jsonBody);
 
     http.begin(url);
+    http.setTimeout(15000); // 15 segundos timeout
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + supabaseApiKey);
     http.addHeader("Content-Type", "application/json");
@@ -68,6 +69,7 @@ bool SupabaseClient::listDogs(String accessToken, String &outJsonString) {
     String params = "?select=*&active=eq.true&order=created_at.desc";
 
     http.begin(url + params);
+    http.setTimeout(15000); // 15 segundos timeout
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + accessToken);
 
@@ -97,17 +99,30 @@ UploadResult SupabaseClient::recordTrainingBatch(String accessToken, String batc
     LOG_PRINTLN("---------------------------");
 
     http.begin(url);
+    http.setTimeout(15000); // 15 segundos timeout
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + accessToken);
     http.addHeader("Content-Type", "application/json");
 
-    String response = http.getString(); 
     int httpCode = http.POST(batchJsonString);
-
+    
     LOG_PRINTF("[Supabase] HTTP Code: %d\n", httpCode);
-    LOG_PRINTLN("[Supabase] Respuesta del Servidor: " + response);
     
     UploadResult result;
+    
+    // Manejar timeout del cliente (código negativo o -1)
+    if (httpCode <= 0) {
+        result = UPLOAD_TIMEOUT;
+        LOG_PRINTLN("[Supabase] ERROR: Connection timeout or failed");
+        http.end();
+        return result;
+    }
+    
+    // Solo leer respuesta si hay contenido (204 = No Content)
+    if (httpCode != 204) {
+        String response = http.getString(); 
+        LOG_PRINTLN("[Supabase] Respuesta del Servidor: " + response);
+    }
     
     if (httpCode == 200 || httpCode == 204) {
         result = UPLOAD_SUCCESS;

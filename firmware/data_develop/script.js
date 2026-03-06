@@ -6,6 +6,147 @@ const MAX_RECONNECT_ATTEMPTS = 60; // 5 minutos (60 intentos x 5 seg)
 let trainingInProgress = false;
 let lastPendingSessions = 0;
 
+// Estado de logs
+let autoRefreshLogs = true;
+let logsRefreshInterval = null;
+let allLogs = [];
+let currentFilter = 'ALL';
+
+// ==================== TAB MANAGEMENT ====================
+function showTab(tabName, buttonEl) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById('tab-' + tabName).classList.add('active');
+    if (buttonEl) {
+        buttonEl.classList.add('active');
+    }
+    
+    // If switching to logs tab, load logs
+    if (tabName === 'logs') {
+        refreshLogs();
+        if (autoRefreshLogs && !logsRefreshInterval) {
+            logsRefreshInterval = setInterval(refreshLogs, 5000);
+        }
+    } else {
+        // Stop auto-refresh when leaving logs tab
+        if (logsRefreshInterval) {
+            clearInterval(logsRefreshInterval);
+            logsRefreshInterval = null;
+        }
+    }
+}
+
+// ==================== LOGS FUNCTIONS ====================
+async function refreshLogs() {
+    try {
+        const maxEntries = 100;
+        const response = await fetch(`/api/logs?max=${maxEntries}`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch logs');
+        }
+        
+        allLogs = await response.json();
+        filterLogs();
+    } catch (error) {
+        console.error('Error loading logs:', error);
+        document.getElementById('logs-container').innerHTML = 
+            '<div class="log-placeholder">Error al cargar logs: ' + error.message + '</div>';
+    }
+}
+
+function filterLogs() {
+    const container = document.getElementById('logs-container');
+    const filter = document.getElementById('logLevelFilter').value;
+    currentFilter = filter;
+    
+    let filteredLogs = allLogs;
+    if (filter !== 'ALL') {
+        filteredLogs = allLogs.filter(log => log.level === filter);
+    }
+    
+    if (filteredLogs.length === 0) {
+        container.innerHTML = '<div class="log-placeholder">No hay eventos registrados</div>';
+        document.getElementById('log-count').textContent = '0 eventos';
+        return;
+    }
+    
+    // Reverse to show newest first
+    filteredLogs = filteredLogs.slice().reverse();
+    
+    let html = '';
+    filteredLogs.forEach(log => {
+        const timestamp = formatTimestamp(log.timestamp);
+        html += `
+            <div class="log-entry ${log.level}">
+                <span class="log-timestamp">[${timestamp}]</span>
+                <span class="log-level ${log.level}">${log.level}</span>
+                <span class="log-message">${escapeHtml(log.message)}</span>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    document.getElementById('log-count').textContent = `${filteredLogs.length} eventos`;
+    
+    // Auto-scroll to bottom (newest)
+    container.scrollTop = 0;
+}
+
+function formatTimestamp(millis) {
+    const seconds = Math.floor(millis / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    
+    if (hours > 0) {
+        return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${seconds % 60}s`;
+    } else {
+        return `${seconds}s`;
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function clearLogsDisplay() {
+    allLogs = [];
+    filterLogs();
+}
+
+function toggleAutoRefresh() {
+    autoRefreshLogs = document.getElementById('autoRefreshCheckbox').checked;
+    
+    if (autoRefreshLogs) {
+        // Start auto-refresh if on logs tab
+        const logsTab = document.getElementById('tab-logs');
+        if (logsTab.classList.contains('active')) {
+            if (!logsRefreshInterval) {
+                logsRefreshInterval = setInterval(refreshLogs, 5000);
+            }
+        }
+    } else {
+        // Stop auto-refresh
+        if (logsRefreshInterval) {
+            clearInterval(logsRefreshInterval);
+            logsRefreshInterval = null;
+        }
+    }
+}
+
+// ==================== ORIGINAL FUNCTIONS ====================
+
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
     restoreFormData(); // Recuperar datos guardados

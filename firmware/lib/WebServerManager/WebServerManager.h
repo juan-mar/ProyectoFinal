@@ -99,6 +99,13 @@ private:
      * Triggers the calibration mode.
      */
     void handleApiPostCalibrate(AsyncWebServerRequest *request);
+
+    /**
+     * @brief GET /api/logs?max=N
+     * Returns event logs in JSON format.
+     * Optional query param 'max' limits number of entries returned.
+     */
+    void handleApiGetLogs(AsyncWebServerRequest *request);
 };
 
 #endif // WEB_SERVER_MANAGER_H

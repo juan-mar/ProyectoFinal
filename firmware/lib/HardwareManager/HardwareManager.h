@@ -135,6 +135,13 @@ private:
         bool prevStateM;            // Estado anterior PIN_MODE_SWITCH_M
     } _modeSwitchState;
 
+    // --- Estado de Control Remoto (Detección Doble BTN1) ---
+    struct RemoteButtonState {
+        bool btn1Pending;           // BTN1 esperando confirmación
+        unsigned long btn1FirstPressTime; // Timestamp del primer BTN1
+        static const unsigned long BTN1_DOUBLE_PRESS_WINDOW_MS = 1000; // 1 segundo
+    } _remoteButtonState;
+
     // --- Estado de Actuadores ---
     struct ActuatorState {
         bool solenoidActive;        // Solenoide disparándose

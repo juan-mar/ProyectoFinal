@@ -33,7 +33,7 @@
 // --- Environmental Sensor (BME280) ---
 #define PIN_BME_SDA 21
 #define PIN_BME_SCL 22
-#define BME280_ADDRESS 0x76         // Dirección I2C del BME280 (0x76 o 0x77)
+#define ENV_BME280_I2C_ADDRESS 0x76 // Dirección I2C del BME280 (0x76 o 0x77)
 
 // --- LED Control ---
 #define PIN_LED_CONTROL 25
@@ -71,6 +71,13 @@
 #define SOLENOID_PULSE_DURATION_MS 200
 #define SOLENOID_COOLDOWN_MS 40000
 #define LAUNCHER_EN2_DELAY_MS 50
+
+/**
+ * @brief PowerUpState duration before transitioning to ConfigState
+ * Allows power supply to stabilize after launcher activation,
+ * preventing brownout conflicts with WiFi peaks
+ */
+#define POWERUP_STATE_DURATION_MS 1000
 
 /****************************************************************
  * LED SEQUENCE PATTERNS

@@ -72,9 +72,12 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_TRAINING_SUCCESS:
             if (internalState == DISPENSING_REWARD) {
-                LOG_PRINTLN("[Auto] Reward Dispensed! Game Over (Win).");
-                manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE);
+                LOG_PRINTLN("[Auto] Reward: Saving session data BEFORE firing...");
+                // CRITICAL: Save session to flash BEFORE firing to prevent data loss from electrical noise
                 saveRun(manager, "success");
+                // Now safe to fire (data already persisted)
+                manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE);
+                LOG_PRINTLN("[Auto] Reward Dispensed! Game Over (Win).");
                 changingState = true;
                 manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             }
@@ -159,7 +162,7 @@ void AutoPlayState::saveRun(StateManager* manager, const char* result) {
       
     String json;
     if (currentSession->serialize(json)) {
-        dataManager->saveSessionFile(json);
+        dataManager->saveSessionFile(json, currentSession->getStartedAt());
         LOG_PRINTF(">> Run saved with result: %s\n", result);
     }
 }

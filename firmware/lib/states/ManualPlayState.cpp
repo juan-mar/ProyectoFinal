@@ -11,6 +11,7 @@
 #include "ConfigState.h"
 #include "Events.h"
 #include "config.h"
+#include "EventLogger.h"
 #include "SyncState.h"
 
 #define MIN_MANUAL_SHOT_INTERVAL_S 40
@@ -24,26 +25,34 @@ ManualPlayState::ManualPlayState(DataManager* dm, TrainingSession* session)
 }
 
 void ManualPlayState::enter(StateManager* manager) {
-    LOG_PRINTLN("Entering ManualPlayState (Multi-Shot Mode)...");
+    unsigned long enterTime = millis();
+    LOG_PRINTF("[Manual][t=%lu] ===== ENTERING ManualPlayState (Multi-Shot Mode) =====\n", enterTime);
+    EVENT_INFO("State ManualPlay entered");
     changingState = false; 
 
     // 1. Inicializar HW del control remoto
+    LOG_PRINTF("[Manual][t=%lu] Enviando comando CMD_REMOTE_POWER_ON...\n", millis());
     manager->getHardwareManager()->sendCommand(CMD_REMOTE_POWER_ON);
     
     // 2. Esperar estabilización
     vTaskDelay(50 / portTICK_PERIOD_MS);
     roundStartMillis = millis();
+    LOG_PRINTF("[Manual][t=%lu] roundStartMillis inicializado = %lu\n", millis(), roundStartMillis);
+    
     isWaitingReward = false;
     rewardDelayMs = 0;
     rewardStartTime = 0;
+    LOG_PRINTF("[Manual][t=%lu] Estado inicial: isWaitingReward=false\n", millis());
 }
 
 
 
 void ManualPlayState::execute(StateManager* manager) {
     Event event;
+    unsigned long execTime = millis();
     
     if (xQueueReceive(manager->getEventQueue(), &event, pdMS_TO_TICKS(50)) == pdTRUE) {
+        LOG_PRINTF("[Manual][t=%lu] >>> EVENTO RECIBIDO: type=%d <<<\n", execTime, event.type);
         handleEvent(manager, event);
     }
     if (!changingState) {
@@ -69,21 +78,34 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         
         // --- EVENTO 1: DETECCIÓN (Control Remoto: Botón "BIEN") ---
         case EVENT_DOG_DETECTED:
-            LOG_PRINTLN("[Manual] Botón BIEN (Detectado). Iniciando cuenta regresiva...");
+        {
+            unsigned long eventTime = millis();
+            rewardDelayMs = currentSession->getDuration() * 1000;
+            LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_DETECTED: Iniciando cuenta regresiva de %d ms\n", 
+                       eventTime, rewardDelayMs);
+            EVENT_INFO("Manual: EVENT_DOG_DETECTED");
             isWaitingReward = true;
-            rewardStartTime = millis();
-            rewardDelayMs = currentSession->getDuration() * 1000; 
+            rewardStartTime = eventTime;
+            LOG_PRINTF("[Manual][t=%lu] rewardStartTime = %lu, targetTime = %lu\n", 
+                       eventTime, rewardStartTime, rewardStartTime + rewardDelayMs);
             break;
+        }
 
         // --- EVENTO 2: PÉRDIDA (Control Remoto: Botón "MAL") ---
         case EVENT_DOG_LOST:
+        {
+            unsigned long eventTime = millis();
             if (isWaitingReward) {
                 // El perro rompió la posición antes de tiempo
-                LOG_PRINTLN("[Manual] Botón MAL. Perro rompió posición. Cancelando temporizador.");
+                unsigned long elapsedMs = eventTime - rewardStartTime;
+                LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_LOST: Perro rompió posición después de %lu ms (necesitaba %d ms)\n",
+                           eventTime, elapsedMs, rewardDelayMs);
+                EVENT_WARN("Manual: EVENT_DOG_LOST while waiting reward");
                 isWaitingReward = false; 
             } else {
                 // Marcó la caja equivocada directamente
-                LOG_PRINTLN("[Manual] Botón MAL sin posición. Anotando fallo definitivo...");
+                LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_LOST: Fallo directo (sin posición activa)\n", eventTime);
+                EVENT_WARN("Manual: EVENT_DOG_LOST direct fail");
                 
                 // Auto-disparamos el evento de fallo
                 Event ev;
@@ -91,29 +113,45 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
                 xQueueSend(manager->getEventQueue(), &ev, 0);
             }
             break;
+        }
 
         // --- EVENTO 3: ÉXITO (Auto-disparado por el update) ---
         case EVENT_TRAINING_SUCCESS:
-            LOG_PRINTLN("[Manual] Procesando ÉXITO. Disparando premio...");
-            manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE, 0);
+        {
+            unsigned long eventTime = millis();
+            LOG_PRINTF("[Manual][t=%lu] EVENT_TRAINING_SUCCESS: Guardando datos ANTES de disparar...\n", eventTime);
+            EVENT_INFO("Manual: EVENT_TRAINING_SUCCESS");
+            // CRITICAL: Save session to flash BEFORE firing to prevent data loss from electrical noise
             saveRun(manager, "success");
+            // Now safe to fire (data already persisted)
+            manager->getHardwareManager()->sendCommand(CMD_SOLENOID_FIRE, 0);
             break;
+        }
 
         // --- EVENTO 4: FALLO (Auto-disparado por el Botón "MAL") ---
         case EVENT_TRAINING_FAILED:
-            LOG_PRINTLN("[Manual] Procesando FALLO...");
+        {
+            unsigned long eventTime = millis();
+            LOG_PRINTF("[Manual][t=%lu] EVENT_TRAINING_FAILED: Guardando fallo...\n", eventTime);
+            EVENT_WARN("Manual: EVENT_TRAINING_FAILED");
             saveRun(manager, "fail");
             break;
+        }
 
-        // --- EVENTO 5: FIN DEL JUEGO (Control Remoto: Botón 3 o Mantener presionado) ---
+        // --- EVENTO 5: FIN DEL JUEGO (Control Remoto: Doble BTN1 o botón FIN) ---
         case EVENT_PLAY_FINISHED:
-            LOG_PRINTLN("[Manual] Fin del entrenamiento. Saliendo a Config...");
+        {
+            unsigned long eventTime = millis();
+            LOG_PRINTF("[Manual][t=%lu] EVENT_PLAY_FINISHED: Finalizando entrenamiento...\n", eventTime);
+            EVENT_INFO("Manual: EVENT_PLAY_FINISHED");
             changingState = true;
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             break;
+        }
 
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
+            EVENT_INFO("Manual: EVENT_MODE_ONLINE_ACTIVATED");
             changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
@@ -125,9 +163,13 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
 
 void ManualPlayState::update(StateManager* manager) {
     if (isWaitingReward) {
-        if (millis() - rewardStartTime >= rewardDelayMs) {
-            
-            LOG_PRINTLN("[Manual] ¡Tiempo cumplido! Auto-disparando EVENT_TRAINING_SUCCESS...");
+        unsigned long now = millis();
+        unsigned long elapsed = now - rewardStartTime;
+        
+        if (elapsed >= rewardDelayMs) {
+            LOG_PRINTF("[Manual][t=%lu] ¡Tiempo cumplido! elapsed=%lu ms >= target=%d ms\n", 
+                       now, elapsed, rewardDelayMs);
+            LOG_PRINTF("[Manual][t=%lu] Auto-disparando EVENT_TRAINING_SUCCESS...\n", now);
             isWaitingReward = false; // Apagamos el temporizador
             
             // Creamos un evento de éxito y lo inyectamos en nuestra propia cola
@@ -141,11 +183,16 @@ void ManualPlayState::update(StateManager* manager) {
 void ManualPlayState::saveRun(StateManager* manager, const char* result) {
     if (currentSession == nullptr) return;
 
+    unsigned long saveStartTime = millis();
+    LOG_PRINTF("\n[Manual][t=%lu] ========== GUARDANDO DISPARO: %s ==========\n", saveStartTime, result);
+
     currentSession->setResult(result);
     currentSession->setDeviceCode(dataManager->getDeviceID());
     
     // Obtener datos ambientales del sensor
+    unsigned long envReadStart = millis();
     EnvData envData = manager->getHardwareManager()->getEnvironmentData();
+    unsigned long envReadTime = millis() - envReadStart;
     
     if (envData.valid) {
         // Crear JSON string con los datos ambientales
@@ -153,17 +200,29 @@ void ManualPlayState::saveRun(StateManager* manager, const char* result) {
                                 ",\"humidity\":" + String(envData.humidity, 1) + 
                                 ",\"pressure\":" + String(envData.pressure, 1) + "}";
         currentSession->setConditions(conditionsJson);
-        LOG_PRINTF("[Manual] Condiciones ambientales: %s\n", conditionsJson.c_str());
+        LOG_PRINTF("[Manual] Condiciones ambientales: %s (lectura: %lu ms)\n", 
+                   conditionsJson.c_str(), envReadTime);
     } else {
-        LOG_PRINTLN("[Manual] WARNING: Sensor ambiental no válido");
+        LOG_PRINTF("[Manual] WARNING: Sensor ambiental no válido (lectura: %lu ms)\n", envReadTime);
     }
     
     // 2. Serializar y Guardar en LittleFS
+    unsigned long serializeStart = millis();
     String json;
     if (currentSession->serialize(json)) {
-        if (dataManager->saveSessionFile(json)) {
-            LOG_PRINTF(">> Tiro Manual guardado: %s \n", result);
+        unsigned long serializeTime = millis() - serializeStart;
+        LOG_PRINTF("[Manual] Serialización completada en %lu ms (json size: %d bytes)\n", 
+                   serializeTime, json.length());
+        
+        unsigned long saveFileStart = millis();
+        if (dataManager->saveSessionFile(json, currentSession->getStartedAt())) {
+            unsigned long saveFileTime = millis() - saveFileStart;
+            LOG_PRINTF(">> Tiro Manual guardado: %s (archivo: %lu ms)\n", result, saveFileTime);
+        } else {
+            LOG_PRINTLN("[Manual] ERROR: Fallo al guardar archivo");
         }
+    } else {
+        LOG_PRINTLN("[Manual] ERROR: Fallo al serializar sesión");
     }
 
     // 3. LIMPIAR PARA EL SIGUIENTE DISPARO
@@ -176,11 +235,22 @@ void ManualPlayState::saveRun(StateManager* manager, const char* result) {
     int advanceSeconds = (elapsedSeconds < MIN_MANUAL_SHOT_INTERVAL_S)
         ? MIN_MANUAL_SHOT_INTERVAL_S
         : elapsedSeconds;
-    LOG_PRINTF("[Manual][Time] now=%lu roundStart=%lu elapsedMs=%lu elapsedS=%d minS=%d\n",
-               now, roundStartMillis, rawElapsedMs, elapsedSeconds, MIN_MANUAL_SHOT_INTERVAL_S);
+    
+    // Log detallado de tiempos
+    LOG_PRINTF("\n[Manual][Time Analysis] ========== ANÁLISIS DE TIEMPOS ==========\n");
+    LOG_PRINTF("[Manual][Time] now             = %lu ms\n", now);
+    LOG_PRINTF("[Manual][Time] roundStartMillis = %lu ms\n", roundStartMillis);
+    LOG_PRINTF("[Manual][Time] rawElapsedMs     = %lu ms (%.2f s)\n", rawElapsedMs, rawElapsedMs/1000.0);
+    LOG_PRINTF("[Manual][Time] elapsedSeconds   = %d s\n", elapsedSeconds);
+    LOG_PRINTF("[Manual][Time] MIN_INTERVAL     = %d s\n", MIN_MANUAL_SHOT_INTERVAL_S);
+    LOG_PRINTF("[Manual][Time] advanceSeconds   = %d s (aplicado)\n", advanceSeconds);
+    
+    unsigned long totalSaveTime = millis() - saveStartTime;
+    LOG_PRINTF("[Manual][Time] Tiempo total saveRun() = %lu ms\n", totalSaveTime);
+    LOG_PRINTF("[Manual][Time] ============================================\n\n");
+    
     currentSession->addSecondsToTimeStamp(advanceSeconds);
     
     roundStartMillis = millis();
-
-    LOG_PRINTF("[Manual] Reloj avanzado +%d s. Listo para el próximo tiro...\n", advanceSeconds);
+    LOG_PRINTF("[Manual] roundStartMillis actualizado = %lu. Listo para el próximo tiro.\n\n", roundStartMillis);
 }

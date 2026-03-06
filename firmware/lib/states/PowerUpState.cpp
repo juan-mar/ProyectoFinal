@@ -1,0 +1,106 @@
+/****************************************************************
+ * @file PowerUpState.cpp
+ * @brief Implements the PowerUpState class logic.
+ * 
+ * PowerUpState activates the launcher at startup and waits for
+ * a configured duration to allow the power supply to stabilize.
+ * This prevents brownout conditions that occur when launcher
+ * power consumption collides with WiFi transmission peaks.
+ * 
+ * Timeline:
+ *   - enter(): Activate launcher (CMD_LAUNCHER_ON)
+ *   - execute(): Wait for POWERUP_STATE_DURATION_MS
+ *   - exit(): Transition to ConfigState (or SyncState if ONLINE mode)
+ ****************************************************************/
+
+#include "PowerUpState.h"
+#include "StateManager.h"
+#include "DataManager.h"
+#include "Events.h"
+#include "config.h"
+#include "HardwareManager.h"
+#include "HardwareConfig.h"
+#include "EventLogger.h"
+
+// States we can transition to
+#include "ConfigState.h"
+#include "SyncState.h"
+
+/****************************************************************
+ * Constructor
+ ****************************************************************/
+
+PowerUpState::PowerUpState() : stateStartTime(0) {}
+
+/****************************************************************
+ * State Methods
+ ****************************************************************/
+
+void PowerUpState::enter(StateManager* manager) {
+    LOG_PRINTLN("[FSM] Entering PowerUpState...");
+    stateStartTime = millis();
+    
+    // Activate launcher - primary responsibility of this state
+    LOG_PRINTLN("[PowerUp] Activating launcher (CMD_LAUNCHER_ON)...");
+    manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_ON, 0);
+    
+    EVENT_INFO("State PowerUp: Launcher activated, stabilizing power");
+}
+
+void PowerUpState::execute(StateManager* manager) {
+    // Check elapsed time
+    uint32_t elapsed = millis() - stateStartTime;
+    
+    // After duration expires, transition to ConfigState
+    if (elapsed >= POWERUP_STATE_DURATION_MS) {
+        LOG_PRINTF("[PowerUp] Duration %lu ms reached. Transitioning to ConfigState.\n", elapsed);
+        manager->changeState(new ConfigState(
+            manager->getDataManager(), 
+            manager->getWebServerManager()
+        ));
+        return;  // Exit this iteration
+    }
+    
+    // Non-blocking event check during waiting period
+    // This allows mode changes to interrupt the power-up sequence
+    Event event;
+    if (xQueueReceive(manager->getEventQueue(), &event, 0) == pdTRUE) {
+        handleEvent(manager, event);
+    }
+}
+
+void PowerUpState::exit(StateManager* manager) {
+    LOG_PRINTLN("[PowerUp] Exiting PowerUpState...");
+}
+
+/****************************************************************
+ * Event Handling
+ ****************************************************************/
+
+void PowerUpState::handleEvent(StateManager* manager, Event& event) {
+    switch (event.type) {
+        case EVENT_MODE_ONLINE_ACTIVATED:
+            // User switched to ONLINE mode during power-up
+            // Skip ConfigState and go directly to SyncState
+            LOG_PRINTLN("[PowerUp] Event: Mode ONLINE detected (interrupting). Jumping to SyncState...");
+            EVENT_INFO("PowerUp: EVENT_MODE_ONLINE_ACTIVATED - Skipping to Sync");
+            manager->changeState(new SyncState(
+                manager->getDataManager(), 
+                manager->getSupabaseClient()
+            ));
+            break;
+            
+        case EVENT_MODE_OFFLINE_ACTIVATED:
+            // Already in OFFLINE mode, ignore
+            LOG_PRINTLN("[PowerUp] Event: Mode OFFLINE (already active). Continuing power-up...");
+            break;
+            
+        default:
+            // Ignore other events during power-up
+            break;
+    }
+}
+
+void PowerUpState::update(StateManager* manager) {
+    // PowerUpState is purely time-based, no periodic update needed
+}
