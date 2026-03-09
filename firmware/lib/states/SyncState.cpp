@@ -12,6 +12,7 @@
 #include "DataManager.h"
 #include "SupabaseClient.h"
 #include "HardwareManager.h"
+#include "EventLogger.h"
 
 #include "Events.h"
 #include "config.h"
@@ -433,13 +434,13 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
         
         case EVENT_USB_CONNECTED:
             LOG_PRINTLN("[SyncState] Event: USB Connected. Cancelling sync and changing to PowerOffState.");
-            EVENT_WARN("Sync: USB connected -> PowerOffState");
+            EVENT_WARN("Syn:USB->PwOff");
             manager->changeState(new PowerOffState());
             break;
             
         case EVENT_POWER_SWITCH_OFF:
             LOG_PRINTLN("[SyncState] Event: Power Switch OFF. Cancelling sync and changing to PowerOffState.");
-            EVENT_WARN("Sync: Power OFF -> PowerOffState");
+            EVENT_WARN("Syn:PWR->PwOff");
             manager->changeState(new PowerOffState());
             break;
         

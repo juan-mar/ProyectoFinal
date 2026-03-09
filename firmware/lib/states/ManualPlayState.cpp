@@ -28,7 +28,7 @@ ManualPlayState::ManualPlayState(DataManager* dm, TrainingSession* session)
 void ManualPlayState::enter(StateManager* manager) {
     unsigned long enterTime = millis();
     LOG_PRINTF("[Manual][t=%lu] ===== ENTERING ManualPlayState (Multi-Shot Mode) =====\n", enterTime);
-    EVENT_INFO("State ManualPlay entered");
+    EVENT_INFO("Man:Entered");
     changingState = false; 
 
     // 1. Inicializar HW del control remoto
@@ -100,7 +100,7 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
                 unsigned long elapsedMs = eventTime - rewardStartTime;
                 LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_LOST: Perro rompió posición después de %lu ms (necesitaba %d ms)\n",
                            eventTime, elapsedMs, rewardDelayMs);
-                EVENT_INFO("Manual: EVENT_DOG_LOST while waiting reward");
+                EVENT_INFO("Man:Dog Lost RWD");
                 isWaitingReward = false; 
             } else {
                 // Marcó la caja equivocada directamente
@@ -119,7 +119,7 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         {
             unsigned long eventTime = millis();
             LOG_PRINTF("[Manual][t=%lu] EVENT_TRAINING_SUCCESS: Guardando datos ANTES de disparar...\n", eventTime);
-            EVENT_INFO("Manual: EVENT_TRAINING_SUCCESS");
+            EVENT_INFO("Man:Success");
             // CRITICAL: Save session to flash BEFORE firing to prevent data loss from electrical noise
             saveRun(manager, "success");
             // Now safe to fire (data already persisted)
@@ -132,7 +132,7 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         {
             unsigned long eventTime = millis();
             LOG_PRINTF("[Manual][t=%lu] EVENT_TRAINING_FAILED: Guardando fallo...\n", eventTime);
-            EVENT_INFO("Manual: EVENT_TRAINING_FAILED");
+            EVENT_INFO("Man:Failed");
             saveRun(manager, "fail");
             break;
         }
@@ -149,21 +149,21 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[Manual] Event: Mode ONLINE. Changing to SyncState.");
-            EVENT_INFO("Manual: EVENT_MODE_ONLINE_ACTIVATED");
+            EVENT_INFO("Man:->Sync");
             changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
             
         case EVENT_USB_CONNECTED:
             LOG_PRINTLN("[Manual] Event: USB Connected. Changing to PowerOffState.");
-            EVENT_WARN("Manual: USB connected -> PowerOffState");
+            EVENT_WARN("Man:USB->PwOff");
             changingState = true;
             manager->changeState(new PowerOffState());
             break;
             
         case EVENT_POWER_SWITCH_OFF:
             LOG_PRINTLN("[Manual] Event: Power Switch OFF. Changing to PowerOffState.");
-            EVENT_WARN("Manual: Power OFF -> PowerOffState");
+            EVENT_WARN("Man:PWR->PwOff");
             changingState = true;
             manager->changeState(new PowerOffState());
             break;

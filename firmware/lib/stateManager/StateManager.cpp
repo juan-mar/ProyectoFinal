@@ -46,11 +46,11 @@ void StateManager::begin() {
     
     if (isOnline) {
         LOG_PRINTLN("StateManager: Mode is ONLINE. Starting in SyncState.");
-        EVENT_INFO("FSM Init: ONLINE mode - SyncState");
+        EVENT_INFO("FSM:ONLINE->Sync");
         currentState = new SyncState(dataManager, supabaseClient);
     } else {
         LOG_PRINTLN("StateManager: Mode is OFFLINE. Starting in PowerUpState.");
-        EVENT_INFO("FSM Init: OFFLINE mode - PowerUpState");
+        EVENT_INFO("FSM:OFFLINE->PwrUp");
         currentState = new PowerUpState();
     }
     
@@ -95,7 +95,7 @@ void StateManager::changeState(State* newState) {
         currentState->enter(this);
     } else {
          LOG_PRINTLN("ERROR: Attempted to change to a NULL state!");
-         EVENT_ERROR("FSM attempted NULL state transition");
+         EVENT_ERROR("FSM:NULL state!");
     }
 }
 

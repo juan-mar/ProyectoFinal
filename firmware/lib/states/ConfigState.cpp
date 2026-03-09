@@ -42,7 +42,7 @@ ConfigState::ConfigState(DataManager* dataManager, WebServerManager* webServer)
 
 void ConfigState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering ConfigState...");
-    EVENT_INFO("State Config entered");
+    EVENT_INFO("Cfg:Entered");
     PIN_MODE(2, OUTPUT); // Debug LED
     PIN_HIGH(2);          // Turn on debug LED
     changingState = false;
@@ -96,14 +96,14 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
-            EVENT_INFO("Config: EVENT_MODE_ONLINE_ACTIVATED");
+            EVENT_INFO("Cfg:->Sync");
             changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
             break;
 
         case EVENT_START_CALIBRATION:
             LOG_PRINTLN("[ConfigState] Event: Start Calibration. Changing to CalibrationState.");
-            EVENT_INFO("Config: EVENT_START_CALIBRATION");
+            EVENT_INFO("Cfg:->Calib");
             this->sessionConfig = nullptr;
             changingState = true;
             manager->changeState(new CalibrationState(dataManager, manager->getHardwareManager()));
@@ -112,7 +112,7 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_START_MANUAL_PLAY:
         {
             LOG_PRINTLN("[ConfigState] Event: Start Manual Play.");
-            EVENT_INFO("Config: EVENT_START_MANUAL_PLAY");
+            EVENT_INFO("Cfg:->Manual");
             changingState = true;
             TrainingSession* sessionToPass = this->sessionConfig;            
             this->sessionConfig = nullptr; 
@@ -122,7 +122,7 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_START_AUTO_PLAY:
         {
             LOG_PRINTLN("[ConfigState] Event: Start Auto Play.");
-            EVENT_INFO("Config: EVENT_START_AUTO_PLAY");
+            EVENT_INFO("Cfg:->Auto");
             changingState = true;
             TrainingSession* sessionToPass = this->sessionConfig;            
             this->sessionConfig = nullptr; 
@@ -131,14 +131,14 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
         }
         case EVENT_USB_CONNECTED:
             LOG_PRINTLN("[ConfigState] Event: USB Connected. Changing to PowerOffState.");
-            EVENT_WARN("Config: USB connected -> PowerOffState");
+            EVENT_WARN("Cfg:USB->PwOff");
             changingState = true;
             manager->changeState(new PowerOffState());
             break;
             
         case EVENT_POWER_SWITCH_OFF:
             LOG_PRINTLN("[ConfigState] Event: Power Switch OFF. Changing to PowerOffState.");
-            EVENT_WARN("Config: Power OFF -> PowerOffState");
+            EVENT_WARN("Cfg:PWR->PwOff");
             changingState = true;
             manager->changeState(new PowerOffState());
             break;

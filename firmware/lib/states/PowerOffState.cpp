@@ -16,7 +16,7 @@ PowerOffState::PowerOffState() {
 
 void PowerOffState::enter(StateManager* manager) {
     LOG_PRINTLN("[FSM] Entering PowerOffState...");
-    EVENT_WARN("State: PowerOff - Shutting down system");
+    EVENT_WARN("PwOff:Shutdown");
 
     // Delegate shutdown and deep sleep to HardwareManager
     manager->getHardwareManager()->enterDeepSleep();

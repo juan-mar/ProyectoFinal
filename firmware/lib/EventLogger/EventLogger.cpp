@@ -31,7 +31,7 @@ void EventLogger::logIfAvailable(EventLogLevel level, const char* message) {
 EventLogger::EventLogger() 
     : head(0), tail(0), count(0), mutex(nullptr)
 #if EVENT_LOGGER_LCD_ENABLED
-    , lcd(nullptr)
+    , lcd(nullptr), lcdNeedsUpdate(false)
 #endif
 {
     // Create mutex for thread safety
@@ -71,6 +71,9 @@ void EventLogger::begin() {
     lcd->print("Initialized");
     vTaskDelay(pdMS_TO_TICKS(1000)); // Show for 1 second
     lcd->clear();
+    
+    // Mark as needing update (in case there are startup logs)
+    lcdNeedsUpdate = true;
 #endif
 
     LOG_PRINTLN("[EventLogger] Initialized");
@@ -93,6 +96,12 @@ void EventLogger::log(EventLogLevel level, const char* message) {
     // Thread-safe buffer write
     if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         addEntry(entry);
+        
+#if EVENT_LOGGER_LCD_ENABLED
+        // Mark LCD as needing update
+        lcdNeedsUpdate = true;
+#endif
+        
         xSemaphoreGive(mutex);
     }
 }
@@ -100,6 +109,11 @@ void EventLogger::log(EventLogLevel level, const char* message) {
 void EventLogger::updateLCD() {
 #if EVENT_LOGGER_LCD_ENABLED
     if (lcd == nullptr || mutex == nullptr) {
+        return;
+    }
+
+    // Quick check: if no new events, skip update
+    if (!lcdNeedsUpdate) {
         return;
     }
 
@@ -115,6 +129,9 @@ void EventLogger::updateLCD() {
             entries[i] = getEntry(startIdx + i);
             entriesToShow++;
         }
+        
+        // Clear the update flag
+        lcdNeedsUpdate = false;
         
         xSemaphoreGive(mutex);
     }
@@ -203,6 +220,11 @@ void EventLogger::clear() {
         head = 0;
         tail = 0;
         count = 0;
+        
+#if EVENT_LOGGER_LCD_ENABLED
+        lcdNeedsUpdate = true; // Mark for LCD update
+#endif
+        
         xSemaphoreGive(mutex);
     }
     
@@ -210,6 +232,57 @@ void EventLogger::clear() {
     if (lcd != nullptr) {
         lcd->clear();
     }
+#endif
+}
+
+void EventLogger::flush() {
+#if EVENT_LOGGER_LCD_ENABLED
+    if (lcd == nullptr || mutex == nullptr) {
+        return;
+    }
+
+    // Force update regardless of lcdNeedsUpdate flag
+    // Get latest logs (thread-safe)
+    LogEntry entries[EVENT_LCD_ROWS];
+    uint8_t entriesToShow = 0;
+
+    if (xSemaphoreTake(mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        // Get last N entries (where N = LCD rows)
+        uint16_t startIdx = (count > EVENT_LCD_ROWS) ? (count - EVENT_LCD_ROWS) : 0;
+        
+        for (uint16_t i = 0; i < EVENT_LCD_ROWS && (startIdx + i) < count; i++) {
+            entries[i] = getEntry(startIdx + i);
+            entriesToShow++;
+        }
+        
+        // Clear the update flag since we're flushing
+        lcdNeedsUpdate = false;
+        
+        xSemaphoreGive(mutex);
+    }
+
+    // Update LCD display
+    lcd->clear();
+    for (uint8_t row = 0; row < entriesToShow; row++) {
+        lcd->setCursor(0, row);
+        
+        char rowText[EVENT_LCD_COLS + 1];
+        char levelChar = 'I';
+        
+        switch (entries[row].level) {
+            case EVENT_LOG_INFO:  levelChar = 'I'; break;
+            case EVENT_LOG_WARN:  levelChar = 'W'; break;
+            case EVENT_LOG_ERROR: levelChar = 'E'; break;
+        }
+        
+        snprintf(rowText, EVENT_LCD_COLS + 1, "%c:%s", levelChar, entries[row].message);
+        rowText[EVENT_LCD_COLS] = '\0';
+        
+        lcd->print(rowText);
+    }
+    
+    // Small delay to ensure LCD finishes writing before sleep
+    vTaskDelay(pdMS_TO_TICKS(50));
 #endif
 }
 

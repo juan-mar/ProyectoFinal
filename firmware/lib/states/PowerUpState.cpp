@@ -45,7 +45,7 @@ void PowerUpState::enter(StateManager* manager) {
     LOG_PRINTLN("[PowerUp] Activating launcher (CMD_LAUNCHER_ON)...");
     manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_ON, 0);
     
-    EVENT_INFO("State PowerUp: Launcher activated, stabilizing power");
+    EVENT_INFO("PwUp:Stabilizing");
 }
 
 void PowerUpState::execute(StateManager* manager) {
@@ -84,7 +84,7 @@ void PowerUpState::handleEvent(StateManager* manager, Event& event) {
             // User switched to ONLINE mode during power-up
             // Skip ConfigState and go directly to SyncState
             LOG_PRINTLN("[PowerUp] Event: Mode ONLINE detected (interrupting). Jumping to SyncState...");
-            EVENT_INFO("PowerUp: EVENT_MODE_ONLINE_ACTIVATED - Skipping to Sync");
+            EVENT_INFO("PwUp:->Sync");
             manager->changeState(new SyncState(
                 manager->getDataManager(), 
                 manager->getSupabaseClient()
@@ -98,13 +98,13 @@ void PowerUpState::handleEvent(StateManager* manager, Event& event) {
             
         case EVENT_USB_CONNECTED:
             LOG_PRINTLN("[PowerUp] Event: USB Connected. Changing to PowerOffState.");
-            EVENT_WARN("PowerUp: USB connected -> PowerOffState");
+            EVENT_WARN("PwUp:USB->PwOff");
             manager->changeState(new PowerOffState());
             break;
             
         case EVENT_POWER_SWITCH_OFF:
             LOG_PRINTLN("[PowerUp] Event: Power Switch OFF. Changing to PowerOffState.");
-            EVENT_WARN("PowerUp: Power OFF -> PowerOffState");
+            EVENT_WARN("PwUp:PWR->PwOff");
             manager->changeState(new PowerOffState());
             break;
             

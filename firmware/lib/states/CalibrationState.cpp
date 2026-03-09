@@ -16,6 +16,7 @@
 
 // States we can transition to
 #include "ConfigState.h"
+#include "PowerOffState.h"
 
 /****************************************************************
  * Defines and Constants
@@ -43,7 +44,7 @@ CalibrationState::CalibrationState(DataManager* dataManager, HardwareManager* ha
 
 void CalibrationState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering CalibrationState...");
-    EVENT_INFO("State Calibration entered");
+    EVENT_INFO("Cal:Entered");
 
     hardwareManager->sendCommand(CMD_TAG_POWER_ON, CMD_TAG_PARAM_CALIBRATION);
 
@@ -78,35 +79,35 @@ void CalibrationState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_CALIBRATION_COMPLETE:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Complete. Returning to ConfigState.");
-            EVENT_INFO("Calib: EVENT_CALIBRATION_COMPLETE");
+            EVENT_INFO("Cal:Complete");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             changingState = true;
             break;
 
         case EVENT_CALIBRATION_CANCEL:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Cancelled. Returning to ConfigState.");
-            EVENT_WARN("Calib: EVENT_CALIBRATION_CANCEL");
+            EVENT_WARN("Cal:Cancelled");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             changingState = true;
             break;
 
         case EVENT_CALIBRATION_FAILED:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Failed. Returning to ConfigState.");
-            EVENT_ERROR("Calib: EVENT_CALIBRATION_FAILED");
+            EVENT_ERROR("Cal:FAILED");
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             changingState = true;
             break;
         
         case EVENT_USB_CONNECTED:
             LOG_PRINTLN("[CalibrationState] Event: USB Connected. Changing to PowerOffState.");
-            EVENT_WARN("Calib: USB connected -> PowerOffState");
+            EVENT_WARN("Cal:USB->PwOff");
             manager->changeState(new PowerOffState());
             changingState = true;
             break;
             
         case EVENT_POWER_SWITCH_OFF:
             LOG_PRINTLN("[CalibrationState] Event: Power Switch OFF. Changing to PowerOffState.");
-            EVENT_WARN("Calib: Power OFF -> PowerOffState");
+            EVENT_WARN("Cal:PWR->PwOff");
             manager->changeState(new PowerOffState());
             changingState = true;
             break;

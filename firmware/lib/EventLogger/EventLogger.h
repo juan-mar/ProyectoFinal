@@ -95,6 +95,13 @@ public:
      */
     void clear();
 
+    /**
+     * @brief Force LCD update (flush pending logs to display)
+     * Useful before entering sleep modes to ensure all logs are displayed
+     * Similar to Serial.flush() for UART
+     */
+    void flush();
+
 private:
     // Singleton constructor
     EventLogger();
@@ -117,6 +124,7 @@ private:
 #if EVENT_LOGGER_LCD_ENABLED
     LiquidCrystal_I2C* lcd;
     uint8_t lastDisplayedIndex[EVENT_LCD_ROWS]; // Track which log is on each LCD row
+    volatile bool lcdNeedsUpdate; // Flag to indicate new events pending display
 #endif
 
     // Helper functions
@@ -135,10 +143,12 @@ private:
     #define EVENT_INFO(msg)  do { EventLogger::logIfAvailable(EVENT_LOG_INFO, (msg)); } while(0)
     #define EVENT_WARN(msg)  do { EventLogger::logIfAvailable(EVENT_LOG_WARN, (msg)); } while(0)
     #define EVENT_ERROR(msg) do { EventLogger::logIfAvailable(EVENT_LOG_ERROR, (msg)); } while(0)
+    #define EVENT_FLUSH()    do { EventLogger* _logger = EventLogger::getInstance(); if (_logger) _logger->flush(); } while(0)
 #else
     #define EVENT_INFO(msg)  do {} while(0)
     #define EVENT_WARN(msg)  do {} while(0)
     #define EVENT_ERROR(msg) do {} while(0)
+    #define EVENT_FLUSH()    do {} while(0)
 #endif
 
 #endif // EVENT_LOGGER_H

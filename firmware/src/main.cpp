@@ -101,7 +101,7 @@ void setup() {
     g_eventLogger = EventLogger::getInstance();
     g_eventLogger->begin();
     LOG_PRINTLN("EventLogger initialized.");
-    EVENT_INFO("System boot started");
+    EVENT_INFO("Main Boot OK");
 #endif
 
     // 6. Create WebServerManager

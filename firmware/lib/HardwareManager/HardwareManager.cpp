@@ -73,10 +73,10 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #if ENABLE_REMOTE_CONTROL
     if (_remoteControl.init()) {
         LOG_PRINTLN("[Hardware] NRF24 Control Remoto inicializado OK.");
-        EVENT_INFO("HW remote initialized");
+        EVENT_INFO("HW:Remote OK");
     } else {
         LOG_PRINTLN("[Hardware] ERROR: Falló el NRF24.");
-        EVENT_ERROR("HW remote init failed");
+        EVENT_ERROR("HW:Remote FAIL");
     }
     _peripheralState.remoteEnabled = false;
     #endif
@@ -93,17 +93,17 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #if ENABLE_ENVIRONMENT_SENSOR
     if (_environmentSensor.init()) {
         LOG_PRINTLN("  - Environment Sensor (BME280) initialized");
-        EVENT_INFO("HW environment sensor initialized");
+        EVENT_INFO("HW:EnvSensor OK");
     } else {
         LOG_PRINTLN("  - WARNING: Environment Sensor init failed");
-        EVENT_WARN("HW environment sensor init failed");
+        EVENT_WARN("HW:EnvSensor FAIL");
     }
     #endif
 
     // Init Mode Switch, Power Switch, and USB detection pins
     #if ENABLE_MODE_SWITCH
-    pinMode(PIN_MODE_SWITCH_ONLINE_OFFLINE, INPUT_PULLUP);
-    pinMode(PIN_POWER_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_MODE_SWITCH_ONLINE_OFFLINE, INPUT);
+    pinMode(PIN_POWER_SWITCH, INPUT);
     pinMode(PIN_USB_DETECT, INPUT);
     _powerStatusState.prevModeSwitch = digitalRead(PIN_MODE_SWITCH_ONLINE_OFFLINE);
     _powerStatusState.prevPowerSwitch = digitalRead(PIN_POWER_SWITCH);
@@ -121,7 +121,7 @@ bool HardwareManager::sendCommand(HwCmdType cmd, int param) {
     
     if (!result) {
         LOG_PRINTF("[HW] WARNING: Command queue full! Dropped command: %d\n", cmd);
-        EVENT_ERROR("HW command queue full");
+        EVENT_ERROR("HW Queue FULL");
     }
     
     return result;
@@ -216,7 +216,7 @@ void HardwareManager::update_remote() {
                 unsigned long deltaMs = now - _remoteButtonState.btn1FirstPressTime;
                 LOG_PRINTF("[HW][t=%lu] *** DOBLE BTN1 DETECTADO (delta=%lums) -> FIN ENTRENAMIENTO ***\n", 
                            now, deltaMs);
-                EVENT_INFO("Remote double BTN1 -> PLAY_FINISHED");
+                EVENT_INFO("HW:Dbl BTN1 END");
                 
                 // Resetear estado
                 _remoteButtonState.btn1Pending = false;
@@ -228,7 +228,7 @@ void HardwareManager::update_remote() {
             } else {
                 // Primera pulsación de BTN1
                 LOG_PRINTF("[HW][t=%lu] BTN1: Primera pulsación -> DETECTADO (esperando 1s para confirmar simple/doble)\n", now);
-                EVENT_INFO("Remote BTN1 -> SUCCESS");
+                EVENT_INFO("HW:BTN1 Success");
                 
                 _remoteButtonState.btn1Pending = true;
                 _remoteButtonState.btn1FirstPressTime = now;
@@ -243,7 +243,7 @@ void HardwareManager::update_remote() {
         case CMD_REMOTE_FAIL: // BTN2
         {
             LOG_PRINTF("[HW][t=%lu] BTN2 (MAL) -> DOG_LOST\n", now);
-            EVENT_WARN("Remote BTN2 -> FAIL");
+            EVENT_WARN("HW:BTN2 Fail");
             
             // Cancelar cualquier BTN1 pendiente
             _remoteButtonState.btn1Pending = false;
@@ -267,7 +267,7 @@ void HardwareManager::update_tag() {
         case CALIB_OK:
         {
             LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
-            EVENT_INFO("BLE calibration OK");
+            EVENT_INFO("HW:BLE Calib OK");
             //SEND EVENT TO FSM IF NEEDED
             Event ev;
             ev.type = EVENT_CALIBRATION_COMPLETE;
@@ -277,7 +277,7 @@ void HardwareManager::update_tag() {
         case DETECT_FAIL: //buscando can - fuera de zona
         {
             LOG_PRINTLN("[HW] BLE Scanner: LOST!");
-            EVENT_WARN("BLE -> DOG_LOST");
+            EVENT_WARN("HW:BLE Dog Lost");
             Event ev;
             ev.type = EVENT_DOG_LOST;
             xQueueSend(_fsmQueue, &ev, 0);
@@ -286,7 +286,7 @@ void HardwareManager::update_tag() {
         case DETECT_OK: //can dectectado - entró a zona
         {
             LOG_PRINTLN("[HW] BLE Scanner: DETECTED!");
-            EVENT_INFO("BLE -> DOG_DETECTED");
+            EVENT_INFO("HW:BLE Dog Detect");
             Event ev;
             ev.type = EVENT_DOG_DETECTED;
             xQueueSend(_fsmQueue, &ev, 0);
@@ -336,12 +336,12 @@ void HardwareManager::checkGPIOStatus() {
             Event evt = {EVENT_MODE_ONLINE_ACTIVATED, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             LOG_PRINTLN("[HW] Mode Switch: ONLINE activated (LOW->HIGH)");
-            EVENT_INFO("HW Mode Switch -> ONLINE");
+            EVENT_INFO("HW:Mode ONLINE");
         } else {
             Event evt = {EVENT_MODE_OFFLINE_ACTIVATED, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             LOG_PRINTLN("[HW] Mode Switch: OFFLINE activated (HIGH->LOW)");
-            EVENT_INFO("HW Mode Switch -> OFFLINE");
+            EVENT_INFO("HW:Mode OFFLINE");
         }
         _powerStatusState.prevModeSwitch = currentModeSwitch;
     }
@@ -353,11 +353,11 @@ void HardwareManager::checkGPIOStatus() {
             Event evt = {EVENT_USB_CONNECTED, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             LOG_PRINTLN("[HW] USB: Connected (charging started)");
-            EVENT_INFO("HW USB Connected - Charging started");
+            EVENT_INFO("HW:USB Charging");
         } else {
             // Transición HIGH -> LOW: USB desconectado
             LOG_PRINTLN("[HW] USB: Disconnected (charging stopped)");
-            EVENT_INFO("HW USB Disconnected");
+            EVENT_INFO("HW:USB Disc");
         }
         _powerStatusState.prevUsbConnected = currentUsbConnected;
     }
@@ -369,7 +369,7 @@ void HardwareManager::checkGPIOStatus() {
             Event evt = {EVENT_POWER_SWITCH_OFF, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             LOG_PRINTLN("[HW] Power Switch: OFF detected (HIGH->LOW)");
-            EVENT_WARN("HW Power Switch -> OFF");
+            EVENT_WARN("HW:Power OFF");
         }
         // Si pasa a HIGH (ON), no generamos evento - el sistema reinicia desde setup()
         _powerStatusState.prevPowerSwitch = currentPowerSwitch;
@@ -594,9 +594,9 @@ void HardwareManager::stopLedSequence() {
 Event HardwareManager::enterLightSleep() {
     // 1. CONFIGURACIÓN (Hardware Specific)
     // Configuramos wakeup por: Power Switch OFF, USB conectado, y Mode Switch
-    pinMode(PIN_POWER_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_POWER_SWITCH, INPUT);
     pinMode(PIN_USB_DETECT, INPUT);
-    pinMode(PIN_MODE_SWITCH_ONLINE_OFFLINE, INPUT_PULLUP);
+    pinMode(PIN_MODE_SWITCH_ONLINE_OFFLINE, INPUT);
     
     int currentPowerState = digitalRead(PIN_POWER_SWITCH);
     int currentUSBState = digitalRead(PIN_USB_DETECT);
@@ -677,8 +677,11 @@ void HardwareManager::enterDeepSleep() {
     LOG_PRINTLN("[HW] Wakeup source: Power Switch ON (rising edge only)");
     LOG_PRINTLN("[HW] Note: Device will RESET on wakeup");
     LOG_PRINTLN("[HW] ======================================");
+    PIN_LOW(2);
+    EVENT_WARN("HW:DeepSleep NOW");
     
-    EVENT_WARN("HW: Entering Deep Sleep - Device will reset on wakeup");
+    // Flush all pending logs to LCD before sleep
+    EVENT_FLUSH();
     
     // 1. Apagar todos los periféricos para mínimo consumo
     #if ENABLE_LED_CONTROL
@@ -715,7 +718,7 @@ void HardwareManager::enterDeepSleep() {
     #endif
     
     // 3. Configurar wakeup SOLO por Power Switch (rising edge)
-    pinMode(PIN_POWER_SWITCH, INPUT_PULLUP);
+    pinMode(PIN_POWER_SWITCH, INPUT);
     
     // EXT0 wakeup: Despierta con nivel HIGH (switch encendido)
     esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_POWER_SWITCH, 1); // 1 = HIGH level

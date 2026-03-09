@@ -14,6 +14,7 @@
 #include "esp_sleep.h" // Required for light sleep functions
 #include "SupabaseClient.h"
 #include "HardwareManager.h"
+#include "EventLogger.h"
 
 // States we can transition to
 #include "PowerUpState.h"
@@ -81,13 +82,13 @@ void IdleState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
         case EVENT_POWER_SWITCH_OFF:
             LOG_PRINTLN("[IdleState] Event: Power Switch OFF. Changing to PowerOffState.");
-            EVENT_WARN("Idle: Power OFF -> PowerOffState");
+            EVENT_WARN("Idl:PWR->PwOff");
             manager->changeState(new PowerOffState());
             break;
             
         case EVENT_USB_CONNECTED:
             LOG_PRINTLN("[IdleState] Event: USB Connected. Changing to PowerOffState.");
-            EVENT_WARN("Idle: USB Connected -> PowerOffState");
+            EVENT_WARN("Idl:USB->PwOff");
             manager->changeState(new PowerOffState());
             break;
             

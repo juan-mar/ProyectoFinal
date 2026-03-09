@@ -62,7 +62,7 @@
  ****************************************************************/
 
 #define EVENT_LOGGER_ENABLED 1
-#define EVENT_LOGGER_LCD_ENABLED 0
+#define EVENT_LOGGER_LCD_ENABLED 1
 #define EVENT_LOGGER_WEB_ENABLED 1
 #define EVENT_LOGGER_BUFFER_SIZE 100
 
