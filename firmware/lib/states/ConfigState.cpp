@@ -21,6 +21,7 @@
 #include "CalibrationState.h"
 #include "ManualPlayState.h"
 #include "AutoPlayState.h"
+#include "PowerOffState.h"
 
 /****************************************************************
  * Defines and Constants
@@ -128,6 +129,20 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
             manager->changeState(new AutoPlayState(dataManager, sessionToPass));
             break;
         }
+        case EVENT_USB_CONNECTED:
+            LOG_PRINTLN("[ConfigState] Event: USB Connected. Changing to PowerOffState.");
+            EVENT_WARN("Config: USB connected -> PowerOffState");
+            changingState = true;
+            manager->changeState(new PowerOffState());
+            break;
+            
+        case EVENT_POWER_SWITCH_OFF:
+            LOG_PRINTLN("[ConfigState] Event: Power Switch OFF. Changing to PowerOffState.");
+            EVENT_WARN("Config: Power OFF -> PowerOffState");
+            changingState = true;
+            manager->changeState(new PowerOffState());
+            break;
+            
         default:
             break;
     }

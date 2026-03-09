@@ -11,8 +11,10 @@
 #include "Config.h"
 #include "EventLogger.h"
 
-// Include the initial state
-#include "PowerUpState.h"  
+// Include the initial states
+#include "PowerUpState.h"
+#include "SyncState.h"
+#include "HardwareConfig.h"  
 
 /****************************************************************
  * Defines and Constants
@@ -36,11 +38,21 @@ StateManager::StateManager(DataManager* dataManager, SupabaseClient* supabaseCli
 }
 
 void StateManager::begin() {
-    // Currently, all initialization is done in the constructor
     LOG_PRINTLN("StateManager: FSM begun.");
-    EVENT_INFO("FSM started");
-    // Set the initial state to PowerUpState (launcher activation + stabilization)
-    currentState = new PowerUpState();
+    
+    // Read Online/Offline switch to decide initial state
+    pinMode(PIN_MODE_SWITCH_ONLINE_OFFLINE, INPUT_PULLUP);
+    bool isOnline = digitalRead(PIN_MODE_SWITCH_ONLINE_OFFLINE) == HIGH;
+    
+    if (isOnline) {
+        LOG_PRINTLN("StateManager: Mode is ONLINE. Starting in SyncState.");
+        EVENT_INFO("FSM Init: ONLINE mode - SyncState");
+        currentState = new SyncState(dataManager, supabaseClient);
+    } else {
+        LOG_PRINTLN("StateManager: Mode is OFFLINE. Starting in PowerUpState.");
+        EVENT_INFO("FSM Init: OFFLINE mode - PowerUpState");
+        currentState = new PowerUpState();
+    }
     
     if (currentState != nullptr) {
         currentState->enter(this);
@@ -72,7 +84,6 @@ void StateManager::execute() {
  * @brief Transitions the FSM to a new state.
  */
 void StateManager::changeState(State* newState) {
-    EVENT_INFO("FSM changeState requested");
     if (currentState != nullptr) {
         currentState->exit(this);
         delete currentState;

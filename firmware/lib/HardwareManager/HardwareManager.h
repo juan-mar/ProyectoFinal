@@ -92,6 +92,14 @@ public:
      * @return Event El evento que causó el despertar (ej: MODE_ONLINE o MODE_OFFLINE).
      */
     Event enterLightSleep();
+    
+    /**
+     * @brief Pone el sistema en suspensión profunda (deep sleep).
+     * Esta función NO RETORNA - el dispositivo se reinicia al despertar.
+     * Consumo mínimo: ~10µA. Despierta SOLO con power switch ON (flanco ascendente).
+     */
+    void enterDeepSleep();
+    
     // Limpiar configuración de sleep y reactivar periféricos
     void prepareForWakeUp();
 
@@ -129,11 +137,12 @@ private:
         bool remoteEnabled;         // Remote NRF24 on/off
     } _peripheralState;
 
-    // --- Estado de Mode Switches ---
-    struct ModeSwitchState {
-        bool prevStateA;            // Estado anterior PIN_MODE_SWITCH_A
-        bool prevStateM;            // Estado anterior PIN_MODE_SWITCH_M
-    } _modeSwitchState;
+    // --- Estado de Mode Switches y Power Status ---
+    struct PowerStatusState {
+        bool prevModeSwitch;        // Estado anterior PIN_MODE_SWITCH_ONLINE_OFFLINE
+        bool prevPowerSwitch;       // Estado anterior PIN_POWER_SWITCH
+        bool prevUsbConnected;      // Estado anterior PIN_USB_DETECT
+    } _powerStatusState;
 
     // --- Estado de Control Remoto (Detección Doble BTN1) ---
     struct RemoteButtonState {
@@ -178,8 +187,8 @@ private:
     void update_tag();
     void update_remote();
     
-    // --- Mode Switches
-    void checkModeSwitches();
+    // --- GPIO Status (mode switch, power switch, USB)
+    void checkGPIOStatus();
     
     // --- Sensors
     void readSensors();            // Batería, Temperatura

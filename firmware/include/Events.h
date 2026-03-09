@@ -42,6 +42,8 @@ enum EventType {
     // --- Hardware Interrupt Events ---
     EVENT_MODE_ONLINE_ACTIVATED,    // Hardware switch moved to ONLINE
     EVENT_MODE_OFFLINE_ACTIVATED,   // Hardware switch moved to OFFLINE
+    EVENT_USB_CONNECTED,            // USB power connected (charging started)
+    EVENT_POWER_SWITCH_OFF,         // Power switch turned OFF
     
     // --- Internal Module Events ---
     EVENT_SYNC_COMPLETED,           // SupabaseManager finished uploading

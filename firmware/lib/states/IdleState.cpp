@@ -18,20 +18,15 @@
 // States we can transition to
 #include "PowerUpState.h"
 #include "SyncState.h"
+#include "PowerOffState.h"
 
 /****************************************************************
  * Defines and Constants
  ****************************************************************/
-
-#define WAKE_UP_PIN     PIN_MODE_SWITCH
-
-/**
- * @brief Wakeup level for the switch.
- * Asumimos que IDLE ocurre en ONLINE (HIGH), y despertamos
- * si el usuario lo mueve a OFFLINE (LOW).
- * (0 = LOW, 1 = HIGH)
- */
-#define MODE_SWITCH_WAKEUP_LEVEL 1 // Wake on high signal (Offline)
+// Idle wakeup sources configured in HardwareManager:
+//   - Power Switch OFF → PowerOffState
+//   - USB Connected → PowerOffState
+//   - Mode Switch change → SyncState (ONLINE) or PowerUpState (OFFLINE)
 
 /****************************************************************
  * Class Method Implementations
@@ -84,14 +79,28 @@ void IdleState::exit(StateManager* manager) {
 
 void IdleState::handleEvent(StateManager* manager, Event& event) {
     switch (event.type) {
+        case EVENT_POWER_SWITCH_OFF:
+            LOG_PRINTLN("[IdleState] Event: Power Switch OFF. Changing to PowerOffState.");
+            EVENT_WARN("Idle: Power OFF -> PowerOffState");
+            manager->changeState(new PowerOffState());
+            break;
+            
+        case EVENT_USB_CONNECTED:
+            LOG_PRINTLN("[IdleState] Event: USB Connected. Changing to PowerOffState.");
+            EVENT_WARN("Idle: USB Connected -> PowerOffState");
+            manager->changeState(new PowerOffState());
+            break;
+            
         case EVENT_MODE_OFFLINE_ACTIVATED:
             LOG_PRINTLN("[IdleState] Event: Mode OFFLINE. Changing to PowerUpState.");
             manager->changeState(new PowerUpState());
             break;
+            
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[IdleState] Event: Mode ONLINE. Changing to SyncState.");
             manager->changeState(new SyncState(manager->getDataManager(), manager->getSupabaseClient()));
             break;
+            
         default:
             break;
     }

@@ -9,9 +9,12 @@
 /****************************************************************
  * PIN CONFIGURATION 
  ****************************************************************/
-// --- Mode Switch (Physical Button) ---
-#define PIN_MODE_SWITCH_A 13
-#define PIN_MODE_SWITCH_M 14
+// --- Mode Switches ---
+#define PIN_MODE_SWITCH_ONLINE_OFFLINE 13  // Online(HIGH)/Offline(LOW) switch
+#define PIN_POWER_SWITCH 14                 // Power ON(HIGH)/OFF(LOW) switch
+
+// --- USB Charging Detection ---
+#define PIN_USB_DETECT 34                   // USB charging detection (HIGH=charging)
 
 
 // --- Tag Reader (BLE) ---

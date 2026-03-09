@@ -25,6 +25,7 @@
 // States we can transition to
 #include "ConfigState.h"
 #include "SyncState.h"
+#include "PowerOffState.h"
 
 /****************************************************************
  * Constructor
@@ -93,6 +94,18 @@ void PowerUpState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_MODE_OFFLINE_ACTIVATED:
             // Already in OFFLINE mode, ignore
             LOG_PRINTLN("[PowerUp] Event: Mode OFFLINE (already active). Continuing power-up...");
+            break;
+            
+        case EVENT_USB_CONNECTED:
+            LOG_PRINTLN("[PowerUp] Event: USB Connected. Changing to PowerOffState.");
+            EVENT_WARN("PowerUp: USB connected -> PowerOffState");
+            manager->changeState(new PowerOffState());
+            break;
+            
+        case EVENT_POWER_SWITCH_OFF:
+            LOG_PRINTLN("[PowerUp] Event: Power Switch OFF. Changing to PowerOffState.");
+            EVENT_WARN("PowerUp: Power OFF -> PowerOffState");
+            manager->changeState(new PowerOffState());
             break;
             
         default:

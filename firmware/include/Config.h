@@ -61,54 +61,17 @@
  * Event Logger Configuration
  ****************************************************************/
 
-/**
- * @brief Master switch for Event Logger system
- * Set to 1 to enable event logging, 0 to disable completely
- */
 #define EVENT_LOGGER_ENABLED 1
-
-/**
- * @brief Enable LCD I2C output for real-time event display
- * Requires LiquidCrystal_I2C library and physical LCD hardware
- * Set to 0 if no LCD is connected
- */
 #define EVENT_LOGGER_LCD_ENABLED 0
-
-/**
- * @brief Enable Web API endpoint /api/logs for remote log viewing
- * Logs can be viewed through the web interface
- */
 #define EVENT_LOGGER_WEB_ENABLED 1
-
-/**
- * @brief Size of circular buffer for log storage (in RAM)
- * Larger = more history, but more RAM usage
- * Recommended: 50-150 entries
- */
 #define EVENT_LOGGER_BUFFER_SIZE 100
 
 /****************************************************************
  * LCD I2C Configuration (only used if EVENT_LOGGER_LCD_ENABLED == 1)
  ****************************************************************/
-
-/**
- * @brief I2C address of the LCD display
- * Common addresses: 0x27 or 0x3F (check your hardware)
- */
 #define EVENT_LCD_ADDR 0x27
-
-/**
- * @brief Number of columns on LCD display
- * Common values: 16 (LCD1602) or 20 (LCD2004)
- */
 #define EVENT_LCD_COLS 20
-
-/**
- * @brief Number of rows on LCD display
- * Common values: 2 (LCD1602) or 4 (LCD2004)
- */
 #define EVENT_LCD_ROWS 4
-
 // --- Alternative preset for LCD1602 (uncomment to use) ---
 // #define EVENT_LCD_COLS 16
 // #define EVENT_LCD_ROWS 2

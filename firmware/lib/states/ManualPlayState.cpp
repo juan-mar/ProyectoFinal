@@ -13,6 +13,7 @@
 #include "config.h"
 #include "EventLogger.h"
 #include "SyncState.h"
+#include "PowerOffState.h"
 
 #define MIN_MANUAL_SHOT_INTERVAL_S 40
 
@@ -83,7 +84,6 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
             rewardDelayMs = currentSession->getDuration() * 1000;
             LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_DETECTED: Iniciando cuenta regresiva de %d ms\n", 
                        eventTime, rewardDelayMs);
-            EVENT_INFO("Manual: EVENT_DOG_DETECTED");
             isWaitingReward = true;
             rewardStartTime = eventTime;
             LOG_PRINTF("[Manual][t=%lu] rewardStartTime = %lu, targetTime = %lu\n", 
@@ -100,12 +100,11 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
                 unsigned long elapsedMs = eventTime - rewardStartTime;
                 LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_LOST: Perro rompió posición después de %lu ms (necesitaba %d ms)\n",
                            eventTime, elapsedMs, rewardDelayMs);
-                EVENT_WARN("Manual: EVENT_DOG_LOST while waiting reward");
+                EVENT_INFO("Manual: EVENT_DOG_LOST while waiting reward");
                 isWaitingReward = false; 
             } else {
                 // Marcó la caja equivocada directamente
                 LOG_PRINTF("[Manual][t=%lu] EVENT_DOG_LOST: Fallo directo (sin posición activa)\n", eventTime);
-                EVENT_WARN("Manual: EVENT_DOG_LOST direct fail");
                 
                 // Auto-disparamos el evento de fallo
                 Event ev;
@@ -133,7 +132,7 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         {
             unsigned long eventTime = millis();
             LOG_PRINTF("[Manual][t=%lu] EVENT_TRAINING_FAILED: Guardando fallo...\n", eventTime);
-            EVENT_WARN("Manual: EVENT_TRAINING_FAILED");
+            EVENT_INFO("Manual: EVENT_TRAINING_FAILED");
             saveRun(manager, "fail");
             break;
         }
@@ -143,17 +142,30 @@ void ManualPlayState::handleEvent(StateManager* manager, Event& event) {
         {
             unsigned long eventTime = millis();
             LOG_PRINTF("[Manual][t=%lu] EVENT_PLAY_FINISHED: Finalizando entrenamiento...\n", eventTime);
-            EVENT_INFO("Manual: EVENT_PLAY_FINISHED");
             changingState = true;
             manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
             break;
         }
 
         case EVENT_MODE_ONLINE_ACTIVATED:
-            LOG_PRINTLN("[ConfigState] Event: Mode ONLINE. Changing to SyncState.");
+            LOG_PRINTLN("[Manual] Event: Mode ONLINE. Changing to SyncState.");
             EVENT_INFO("Manual: EVENT_MODE_ONLINE_ACTIVATED");
             changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
+            break;
+            
+        case EVENT_USB_CONNECTED:
+            LOG_PRINTLN("[Manual] Event: USB Connected. Changing to PowerOffState.");
+            EVENT_WARN("Manual: USB connected -> PowerOffState");
+            changingState = true;
+            manager->changeState(new PowerOffState());
+            break;
+            
+        case EVENT_POWER_SWITCH_OFF:
+            LOG_PRINTLN("[Manual] Event: Power Switch OFF. Changing to PowerOffState.");
+            EVENT_WARN("Manual: Power OFF -> PowerOffState");
+            changingState = true;
+            manager->changeState(new PowerOffState());
             break;
 
         default:

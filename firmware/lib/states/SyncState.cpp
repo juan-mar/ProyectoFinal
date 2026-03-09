@@ -23,6 +23,7 @@
 // States we can transition to
 #include "PowerUpState.h"
 #include "IdleState.h"
+#include "PowerOffState.h"
 
 /****************************************************************
  * Defines and Constants
@@ -428,6 +429,18 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
             //Send CMD
             //manager->getUserInterface()->setLedPattern(LED_ERROR_DB);
             manager->changeState(new IdleState());
+            break;
+        
+        case EVENT_USB_CONNECTED:
+            LOG_PRINTLN("[SyncState] Event: USB Connected. Cancelling sync and changing to PowerOffState.");
+            EVENT_WARN("Sync: USB connected -> PowerOffState");
+            manager->changeState(new PowerOffState());
+            break;
+            
+        case EVENT_POWER_SWITCH_OFF:
+            LOG_PRINTLN("[SyncState] Event: Power Switch OFF. Cancelling sync and changing to PowerOffState.");
+            EVENT_WARN("Sync: Power OFF -> PowerOffState");
+            manager->changeState(new PowerOffState());
             break;
         
         default:

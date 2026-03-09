@@ -7,6 +7,8 @@
 #include "ConfigState.h"
 #include "Events.h"
 #include "Config.h"
+#include "EventLogger.h"
+#include "PowerOffState.h"
 
 AutoPlayState::AutoPlayState(DataManager* dm, TrainingSession* session)
     : dataManager(dm), currentSession(session), internalState(WAITING_FOR_DOG),
@@ -16,6 +18,7 @@ AutoPlayState::AutoPlayState(DataManager* dm, TrainingSession* session)
 
 void AutoPlayState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering AutoPlayState (Single Shot Mode)...");
+    EVENT_INFO("State AutoPlay entered");
     changingState = false;
 
     // Iniciar cronómetro global del juego
@@ -57,6 +60,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_DOG_DETECTED:
             if (internalState == WAITING_FOR_DOG) {
                 LOG_PRINTLN("[Auto] ¡Perro detectado! Iniciando exigencia...");
+                EVENT_INFO("Auto: EVENT_DOG_DETECTED");
                 internalState = DOG_DETECTED_TIMING;
                 detectionStartTime = millis();
             }
@@ -65,6 +69,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_DOG_LOST:
             if (internalState == DOG_DETECTED_TIMING) {
                 LOG_PRINTLN("[Auto] Perro salió antes de tiempo. Reiniciando espera...");
+                EVENT_WARN("Auto: EVENT_DOG_LOST early exit");
                 internalState = WAITING_FOR_DOG;
                 stateStartTime = millis(); 
             }
@@ -73,6 +78,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_TRAINING_SUCCESS:
             if (internalState == DISPENSING_REWARD) {
                 LOG_PRINTLN("[Auto] Reward: Saving session data BEFORE firing...");
+                EVENT_INFO("Auto: EVENT_TRAINING_SUCCESS");
                 // CRITICAL: Save session to flash BEFORE firing to prevent data loss from electrical noise
                 saveRun(manager, "success");
                 // Now safe to fire (data already persisted)
@@ -86,6 +92,7 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_TRAINING_FAILED:
             if (internalState == TIMEOUT_FAIL) {
                 LOG_PRINTLN("[Auto] TIMEOUT FAIL. Game Over (Error).");
+                EVENT_ERROR("Auto: EVENT_TRAINING_FAILED timeout");
                 saveRun(manager, "fail");
                 changingState = true;
                 manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
@@ -94,8 +101,23 @@ void AutoPlayState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_MODE_ONLINE_ACTIVATED:
             LOG_PRINTLN("[AutoPlay] Event: Mode ONLINE. Changing to SyncState.");
+            EVENT_INFO("Auto: EVENT_MODE_ONLINE_ACTIVATED");
             changingState = true;
             manager->changeState(new SyncState(dataManager, manager->getSupabaseClient()));
+            break;
+            
+        case EVENT_USB_CONNECTED:
+            LOG_PRINTLN("[AutoPlay] Event: USB Connected. Changing to PowerOffState.");
+            EVENT_WARN("Auto: USB connected -> PowerOffState");
+            changingState = true;
+            manager->changeState(new PowerOffState());
+            break;
+            
+        case EVENT_POWER_SWITCH_OFF:
+            LOG_PRINTLN("[AutoPlay] Event: Power Switch OFF. Changing to PowerOffState.");
+            EVENT_WARN("Auto: Power OFF -> PowerOffState");
+            changingState = true;
+            manager->changeState(new PowerOffState());
             break;
 
         default:

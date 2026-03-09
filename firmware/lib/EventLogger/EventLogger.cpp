@@ -21,6 +21,13 @@ EventLogger* EventLogger::getInstance() {
     return instance;
 }
 
+void EventLogger::logIfAvailable(EventLogLevel level, const char* message) {
+    EventLogger* logger = getInstance();
+    if (logger != nullptr) {
+        logger->log(level, message);
+    }
+}
+
 EventLogger::EventLogger() 
     : head(0), tail(0), count(0), mutex(nullptr)
 #if EVENT_LOGGER_LCD_ENABLED

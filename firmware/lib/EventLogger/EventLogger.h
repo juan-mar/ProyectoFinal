@@ -67,6 +67,12 @@ public:
     void log(EventLogLevel level, const char* message);
 
     /**
+     * @brief Log only if the singleton is available.
+     * Resolves getInstance() once and avoids duplicate calls in macros.
+     */
+    static void logIfAvailable(EventLogLevel level, const char* message);
+
+    /**
      * @brief Update LCD display with latest logs (call from task)
      * This is a blocking operation (~500µs), should be called from dedicated task
      */
@@ -126,9 +132,9 @@ private:
  * Convenience Macros
  ****************************************************************/
 #if EVENT_LOGGER_ENABLED
-    #define EVENT_INFO(msg)  do { if(EventLogger::getInstance()) EventLogger::getInstance()->log(EVENT_LOG_INFO, msg); } while(0)
-    #define EVENT_WARN(msg)  do { if(EventLogger::getInstance()) EventLogger::getInstance()->log(EVENT_LOG_WARN, msg); } while(0)
-    #define EVENT_ERROR(msg) do { if(EventLogger::getInstance()) EventLogger::getInstance()->log(EVENT_LOG_ERROR, msg); } while(0)
+    #define EVENT_INFO(msg)  do { EventLogger::logIfAvailable(EVENT_LOG_INFO, (msg)); } while(0)
+    #define EVENT_WARN(msg)  do { EventLogger::logIfAvailable(EVENT_LOG_WARN, (msg)); } while(0)
+    #define EVENT_ERROR(msg) do { EventLogger::logIfAvailable(EVENT_LOG_ERROR, (msg)); } while(0)
 #else
     #define EVENT_INFO(msg)  do {} while(0)
     #define EVENT_WARN(msg)  do {} while(0)
