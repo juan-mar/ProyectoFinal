@@ -70,6 +70,36 @@ select:focus, input:focus {
     border-color: #007bff;
 }
 
+/* Password Field with Toggle */
+.password-field {
+    display: flex;
+    gap: 0;
+    align-items: center;
+    position: relative;
+}
+
+.password-field input {
+    flex: 1;
+    border-radius: 8px 0 0 8px;
+    margin-bottom: 0;
+}
+
+.toggle-password {
+    padding: 12px 14px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    font-size: 16px;
+    color: #666;
+    transition: background 0.2s;
+}
+
+.toggle-password:active {
+    background: #e9ecef;
+}
+
 /* Checkboxes */
 .checkbox-group {
     display: flex;

@@ -106,6 +106,13 @@ private:
      * Optional query param 'max' limits number of entries returned.
      */
     void handleApiGetLogs(AsyncWebServerRequest *request);
+
+    /**
+     * @brief POST /api/network-config
+     * Saves WiFi credentials (SSID and password) to NVS.
+     * Expected JSON: {"ssid": "...", "password": "..."}
+     */
+    void handleApiPostNetworkConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
 };
 
 #endif // WEB_SERVER_MANAGER_H

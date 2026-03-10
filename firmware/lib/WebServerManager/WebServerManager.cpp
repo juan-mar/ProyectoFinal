@@ -124,6 +124,14 @@ void WebServerManager::setupRoutes() {
         this->handleApiGetLogs(request);
     });
 
+    server->on("/api/network-config", HTTP_POST, 
+        [](AsyncWebServerRequest *request){ }, 
+        NULL,
+        [this](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+            this->handleApiPostNetworkConfig(request, data, len, index, total);
+        }
+    );
+
     // ==========================================
     // 2. TRAMPAS PARA PORTAL CAUTIVO (Atrapar antes de buscar archivos)
     // ==========================================
@@ -322,4 +330,73 @@ void WebServerManager::handleApiGetLogs(AsyncWebServerRequest *request) {
 #else
     request->send(501, "application/json", "{\"error\":\"Event logging disabled\"}");
 #endif
+}
+
+void WebServerManager::handleApiPostNetworkConfig(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
+    // Reconstruir JSON desde buffer
+    String body = "";
+    for(size_t i=0; i<len; i++) body += (char)data[i];
+    
+    LOG_PRINTLN("[API NETWORK-CONFIG] Nueva configuración de red recibida");
+    LOG_PRINTLN("Raw JSON payload:");
+    LOG_PRINTLN(body);
+
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, body);
+
+    if (error) {
+        LOG_PRINTLN("[ERROR] JSON Parsing fallido");
+        request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Invalid JSON\"}");
+        return;
+    }
+
+    // Extraer datos del documento JSON
+    const char* ssid = doc["ssid"] | "";
+    const char* password = doc["password"] | "";
+
+    LOG_PRINTLN("[PARSED] Datos extraidos:");
+    LOG_PRINTF("  SSID: %s\n", ssid);
+    LOG_PRINTF("  Password length: %d\n", strlen(password));
+
+    // Validaciones
+    if (strlen(ssid) == 0) {
+        LOG_PRINTLN("[ERROR] SSID vacio");
+        request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"SSID cannot be empty\"}");
+        return;
+    }
+
+    if (strlen(password) == 0) {
+        LOG_PRINTLN("[ERROR] Password vacio");
+        request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Password cannot be empty\"}");
+        return;
+    }
+
+    if (strlen(ssid) > 32) {
+        LOG_PRINTLN("[ERROR] SSID excede 32 caracteres");
+        request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"SSID too long (max 32 chars)\"}");
+        return;
+    }
+
+    if (strlen(password) > 64) {
+        LOG_PRINTLN("[ERROR] Password excede 64 caracteres");
+        request->send(400, "application/json", "{\"status\":\"error\",\"msg\":\"Password too long (max 64 chars)\"}");
+        return;
+    }
+
+    // Guardar en NVS usando DataManager
+    if (dataManager != nullptr) {
+        dataManager->saveWifiCredentials(String(ssid), String(password));
+        LOG_PRINTLN("[SUCCESS] WiFi credentials guardadas en NVS");
+        
+        StaticJsonDocument<128> responseDoc;
+        responseDoc["status"] = "success";
+        responseDoc["msg"] = "WiFi credentials saved successfully";
+        
+        String response;
+        serializeJson(responseDoc, response);
+        request->send(200, "application/json", response);
+    } else {
+        LOG_PRINTLN("[ERROR] DataManager no disponible");
+        request->send(500, "application/json", "{\"status\":\"error\",\"msg\":\"DataManager not available\"}");
+    }
 }

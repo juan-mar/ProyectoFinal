@@ -12,6 +12,9 @@ let logsRefreshInterval = null;
 let allLogs = [];
 let currentFilter = 'ALL';
 
+// Estado de red WiFi
+let passwordVisible = false;
+
 // ==================== TAB MANAGEMENT ====================
 function showTab(tabName, buttonEl) {
     // Hide all tabs
@@ -147,6 +150,93 @@ function toggleAutoRefresh() {
 
 // ==================== ORIGINAL FUNCTIONS ====================
 
+// ==================== NETWORK CONFIG FUNCTIONS ====================
+function togglePasswordVisibility() {
+    const passwordInput = document.getElementById('wifiPassword');
+    passwordVisible = !passwordVisible;
+    
+    if (passwordVisible) {
+        passwordInput.type = 'text';
+    } else {
+        passwordInput.type = 'password';
+    }
+}
+
+async function saveNetworkConfig() {
+    const ssid = document.getElementById('wifiSSID').value.trim();
+    const password = document.getElementById('wifiPassword').value;
+    const btn = document.getElementById('btn-save-network');
+    const msg = document.getElementById('network-status-msg');
+    
+    // Validaciones
+    if (!ssid || ssid === "") {
+        msg.style.color = 'red';
+        msg.innerText = '❌ El SSID no puede estar vacío';
+        return;
+    }
+    
+    if (!password || password === "") {
+        msg.style.color = 'red';
+        msg.innerText = '❌ La contraseña no puede estar vacía';
+        return;
+    }
+    
+    if (ssid.length > 32) {
+        msg.style.color = 'red';
+        msg.innerText = '❌ El SSID no puede exceder 32 caracteres';
+        return;
+    }
+    
+    if (password.length > 64) {
+        msg.style.color = 'red';
+        msg.innerText = '❌ La contraseña no puede exceder 64 caracteres';
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.innerText = '💾 Guardando...';
+    msg.innerText = '';
+    
+    const payload = {
+        ssid: ssid,
+        password: password
+    };
+    
+    try {
+        const res = await fetch('/api/network-config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+            msg.style.color = 'green';
+            msg.innerText = '✅ Configuración guardada exitosamente';
+            
+            // Limpiar campos después de 1.5 segundos
+            setTimeout(() => {
+                document.getElementById('wifiSSID').value = '';
+                document.getElementById('wifiPassword').value = '';
+                // Asegurar que el password vuelva a estar oculto
+                passwordVisible = false;
+                document.getElementById('wifiPassword').type = 'password';
+                msg.innerText = '';
+            }, 1500);
+        } else {
+            throw new Error(data.msg || 'Error desconocido');
+        }
+    } catch (error) {
+        msg.style.color = 'red';
+        msg.innerText = '❌ Error: ' + error.message;
+    } finally {
+        btn.disabled = false;
+        btn.innerText = 'Guardar Configuración';
+    }
+}
+
+// ==================== INITIALIZATION ====================
 // Inicialización
 document.addEventListener('DOMContentLoaded', () => {
     restoreFormData(); // Recuperar datos guardados

@@ -18,6 +18,7 @@
         <!-- Navigation Tabs -->
         <div class="tabs">
             <button class="tab-btn active" onclick="showTab('config', this)">⚙️ Configuración</button>
+            <button class="tab-btn" onclick="showTab('network', this)">📡 Red WiFi</button>
             <button class="tab-btn" onclick="showTab('logs', this)">📋 Logs</button>
         </div>
     </header>
@@ -91,6 +92,27 @@
         
         <p id="status-msg"></p>
     </main>
+
+    <!-- Network Tab Content -->
+    <div id="tab-network" class="tab-content">
+        <div class="card">
+            <h3>Configurar Red WiFi</h3>
+            <p style="color: #666; font-size: 0.9em; margin-bottom: 15px;">Ingresa la red y contraseña a la cual se conectará la ESP32 para sincronizar datos.</p>
+            
+            <label>SSID (Nombre de Red):</label>
+            <input type="text" id="wifiSSID" placeholder="Ej: Mi_Red_WiFi" maxlength="32">
+            
+            <label style="margin-top: 15px;">Contraseña:</label>
+            <div class="password-field">
+                <input type="password" id="wifiPassword" placeholder="Contraseña" maxlength="64">
+                <button type="button" class="toggle-password" onclick="togglePasswordVisibility()">👁️</button>
+            </div>
+            
+            <button id="btn-save-network" onclick="saveNetworkConfig()" style="margin-top: 20px;">Guardar Configuración</button>
+            
+            <p id="network-status-msg" style="margin-top: 15px; text-align: center;"></p>
+        </div>
+    </div>
 
     <!-- Logs Tab Content -->
     <div id="tab-logs" class="tab-content">
