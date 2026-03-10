@@ -47,7 +47,11 @@ enum EventType {
     
     // --- Internal Module Events ---
     EVENT_SYNC_COMPLETED,           // SupabaseManager finished uploading
-    EVENT_SYNC_FAILED               // SupabaseManager failed to upload
+    EVENT_SYNC_FAILED,              // SupabaseManager failed to upload
+    
+    // --- PowerOffState Specific Events (from HardwareManager) ---
+    EVENT_POWEROFF_USB_DISCONNECTED,  // USB disconnected while in PowerOffState
+    EVENT_POWEROFF_READY_TO_SLEEP     // Power Switch released (GPIO14 LOW) - ready for deep sleep
 };
 
 /**

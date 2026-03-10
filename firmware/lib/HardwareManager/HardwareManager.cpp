@@ -330,6 +330,30 @@ void HardwareManager::checkGPIOStatus() {
     bool currentPowerSwitch = digitalRead(PIN_POWER_SWITCH);
     bool currentUsbConnected = digitalRead(PIN_USB_DETECT);
 
+    // ========== SPECIAL MONITORING DURING POWEROFFSTATE ==========
+    // Si estamos en PowerOffState, monitorear para eventos específicos
+    if (_isInPowerOffState) {
+        // ¿Se desconectó USB?
+        if (currentUsbConnected == LOW && _powerStatusState.prevUsbConnected == HIGH) {
+            LOG_PRINTLN("[HW] USB disconnected during PowerOff! Notifying FSM...");
+            Event evt = {EVENT_POWEROFF_USB_DISCONNECTED, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            EVENT_INFO("HW:USB Disc PwOff");
+        }
+        
+        // ¿Power Switch está en LOW? (listo para dormir)
+        // One-shot latch para evitar spam de eventos.
+        if (currentPowerSwitch == LOW && !_powerOffReadyEventLatched) {
+            LOG_PRINTLN("[HW] Power Switch released during PowerOff! Ready to sleep...");
+            Event evt = {EVENT_POWEROFF_READY_TO_SLEEP, 0};
+            xQueueSend(_fsmQueue, &evt, 0);
+            EVENT_INFO("HW:Ready Sleep");
+            _powerOffReadyEventLatched = true;
+        } else if (currentPowerSwitch == HIGH) {
+            _powerOffReadyEventLatched = false;
+        }
+    }
+
     // Detectar cambio en Mode Switch (Online/Offline)
     if (currentModeSwitch != _powerStatusState.prevModeSwitch) {
         if (currentModeSwitch == HIGH) {
@@ -348,13 +372,14 @@ void HardwareManager::checkGPIOStatus() {
     
     // Detectar cambio en USB (conectado/desconectado)
     if (currentUsbConnected != _powerStatusState.prevUsbConnected) {
-        if (currentUsbConnected == HIGH) {
+        if (currentUsbConnected == HIGH && !_isInPowerOffState) {
             // Transición LOW -> HIGH: USB conectado (cargando)
+            // (Only send event if NOT in PowerOffState - PowerOff has its own handling)
             Event evt = {EVENT_USB_CONNECTED, 0};
             xQueueSend(_fsmQueue, &evt, 0);
             LOG_PRINTLN("[HW] USB: Connected (charging started)");
             EVENT_INFO("HW:USB Charging");
-        } else {
+        } else if (currentUsbConnected == LOW && !_isInPowerOffState) {
             // Transición HIGH -> LOW: USB desconectado
             LOG_PRINTLN("[HW] USB: Disconnected (charging stopped)");
             EVENT_INFO("HW:USB Disc");
@@ -362,18 +387,22 @@ void HardwareManager::checkGPIOStatus() {
         _powerStatusState.prevUsbConnected = currentUsbConnected;
     }
     
-    // Detectar cambio en Power Switch (solo flanco descendente: apagado)
-    if (currentPowerSwitch != _powerStatusState.prevPowerSwitch) {
-        if (currentPowerSwitch == LOW) {
-            // Transición HIGH -> LOW: Switch apagado
+    // Detectar Power Switch OFF por NIVEL + latch (no spam de cola).
+    // Esto cubre también el caso de boot con switch ya en LOW.
+    if (!_isInPowerOffState) {
+        if (currentPowerSwitch == LOW && !_powerSwitchOffEventLatched) {
             Event evt = {EVENT_POWER_SWITCH_OFF, 0};
             xQueueSend(_fsmQueue, &evt, 0);
-            LOG_PRINTLN("[HW] Power Switch: OFF detected (HIGH->LOW)");
+            LOG_PRINTLN("[HW] Power Switch: OFF level detected");
             EVENT_WARN("HW:Power OFF");
+            _powerSwitchOffEventLatched = true;
+        } else if (currentPowerSwitch == HIGH) {
+            _powerSwitchOffEventLatched = false;
         }
-        // Si pasa a HIGH (ON), no generamos evento - el sistema reinicia desde setup()
-        _powerStatusState.prevPowerSwitch = currentPowerSwitch;
     }
+
+    // Guardar estado actual para detección de transiciones en próximo ciclo
+    _powerStatusState.prevPowerSwitch = currentPowerSwitch;
 }
 
 
@@ -674,7 +703,7 @@ void HardwareManager::enterDeepSleep() {
     LOG_PRINTLN("[HW] ======================================");
     LOG_PRINTLN("[HW] Entering DEEP SLEEP mode...");
     LOG_PRINTLN("[HW] Power consumption: ~10µA");
-    LOG_PRINTLN("[HW] Wakeup source: Power Switch ON (rising edge only)");
+    LOG_PRINTLN("[HW] Wakeup source: Power Switch ON (GPIO14 HIGH)");
     LOG_PRINTLN("[HW] Note: Device will RESET on wakeup");
     LOG_PRINTLN("[HW] ======================================");
     PIN_LOW(2);
@@ -700,7 +729,6 @@ void HardwareManager::enterDeepSleep() {
     // 2. Apagar WiFi, Remoto, BME280, Tag (si está habilitado en la FSM)
     #if ENABLE_REMOTE_CONTROL
     if (_peripheralState.remoteEnabled) {
-        // CMD_REMOTE_POWER_OFF ya desactiva el NRF24
         sendCommand(CMD_REMOTE_POWER_OFF, 0);
         _peripheralState.remoteEnabled = false;
     }
@@ -714,16 +742,14 @@ void HardwareManager::enterDeepSleep() {
     #endif
     
     #if ENABLE_ENVIRONMENT_SENSOR
-    // No hay método powerOff en BME280, se desactiva con I2C inactivo
+    // BME280 se desactiva automáticamente con I2C inactivo
     #endif
     
-    // 3. Configurar wakeup SOLO por Power Switch (rising edge)
+    // 3. Configurar wakeup SOLO por Power Switch (GPIO14 = HIGH)
     pinMode(PIN_POWER_SWITCH, INPUT);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_POWER_SWITCH, 1);  // 1 = HIGH level
     
-    // EXT0 wakeup: Despierta con nivel HIGH (switch encendido)
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_POWER_SWITCH, 1); // 1 = HIGH level
-    
-    LOG_PRINTLN("[HW] Deep Sleep configured. Wakeup on Power Switch HIGH (rising edge).");
+    LOG_PRINTLN("[HW] Deep Sleep configured. Waiting for Power Switch HIGH...");
     LOG_FLUSH();
     
     // 4. ENTRAR EN DEEP SLEEP
@@ -756,4 +782,15 @@ int HardwareManager::getBatteryPercentage() {
 
 EnvData HardwareManager::getEnvironmentData() {
     return _environmentSensor.getLastValidReadings();
+}
+
+void HardwareManager::notifyPowerOffState(bool entering) {
+    _isInPowerOffState = entering;
+    _powerOffReadyEventLatched = false;
+    
+    if (entering) {
+        LOG_PRINTLN("[HW] PowerOffState ENTERED - GPIO monitoring enabled");
+    } else {
+        LOG_PRINTLN("[HW] PowerOffState EXITED - GPIO monitoring disabled");
+    }
 }

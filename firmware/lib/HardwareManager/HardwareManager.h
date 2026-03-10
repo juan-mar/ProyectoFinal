@@ -119,6 +119,13 @@ public:
      * @return Estructura EnvData con temperatura, humedad, presión y flag de validez.
      */
     EnvData getEnvironmentData();
+    
+    /**
+     * @brief Notify HardwareManager when PowerOffState is active.
+     * Enables GPIO monitoring for USB disconnect event during power-off sequence.
+     * @param entering true = entering PowerOffState, false = exiting PowerOffState
+     */
+    void notifyPowerOffState(bool entering);
 
 private:
     // Colas
@@ -150,6 +157,11 @@ private:
         unsigned long btn1FirstPressTime; // Timestamp del primer BTN1
         static const unsigned long BTN1_DOUBLE_PRESS_WINDOW_MS = 1000; // 1 segundo
     } _remoteButtonState;
+    
+    // --- PowerOffState Monitoring ---
+    bool _isInPowerOffState = false;  // True when PowerOffState is active, signals GPIO monitoring
+    bool _powerSwitchOffEventLatched = false;  // One-shot latch while power switch stays LOW
+    bool _powerOffReadyEventLatched = false;   // One-shot latch for EVENT_POWEROFF_READY_TO_SLEEP
 
     // --- Estado de Actuadores ---
     struct ActuatorState {
