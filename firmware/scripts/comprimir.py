@@ -2,8 +2,14 @@ import os
 import gzip
 import shutil
 
-origen = 'data_develop'
-destino = 'data'
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+
+origen = os.path.join(project_root, 'data_develop')
+destino = os.path.join(project_root, 'data')
+
+if not os.path.isdir(origen):
+    raise FileNotFoundError(f"No se encontro la carpeta origen: {origen}")
 
 # 1. Creamos la carpeta 'data' si no existe
 if not os.path.exists(destino):
