@@ -26,7 +26,15 @@
 struct BatteryInfo {
     float voltage;       ///< Battery voltage in volts
     int percentage;      ///< Battery percentage (0-100)
+    uint8_t level;       ///< Battery level category (BatteryLevel)
     bool isCritical;     ///< True if battery is below critical threshold
+};
+
+enum BatteryLevel : uint8_t {
+    BATTERY_LEVEL_CRITICAL = 0,
+    BATTERY_LEVEL_LOW,
+    BATTERY_LEVEL_MEDIUM,
+    BATTERY_LEVEL_HIGH
 };
 
 /****************************************************************

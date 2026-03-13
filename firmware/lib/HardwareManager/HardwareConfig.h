@@ -39,7 +39,9 @@
 #define ENV_BME280_I2C_ADDRESS 0x76 // Dirección I2C del BME280 (0x76 o 0x77)
 
 // --- LED Control ---
-#define PIN_LED_CONTROL 25
+#define PIN_LED_R 25
+#define PIN_LED_G 26
+#define PIN_LED_B 27
 
 #define PWM_CHANNEL_LED 0
 #define PWM_FREQUENCY_LED 1000     // Hz
@@ -47,7 +49,7 @@
 
 // --- Battery Monitor ---
 #define PIN_BATTERY 39              // ADC pin para lectura de voltaje de batería
-#define BATTERY_MULTIPLIER 2.0      // Divisor de voltaje: 2.0 = (R1+R2)/R2
+#define BATTERY_MULTIPLIER (12.7f / 2.7f)  // Vin_ADC = Vbat * (2.7/12.7) => Vbat = Vin_ADC * (12.7/2.7)
 
 /****************************************************************
  * TIMING CONSTANTS
@@ -123,7 +125,7 @@
 #define ENABLE_SOLENOID 1
 #define ENABLE_LAUNCHER 1
 #define ENABLE_BLE_SCANNER 1
-#define ENABLE_BATTERY_MONITOR 0
+#define ENABLE_BATTERY_MONITOR 1
 #define ENABLE_ENVIRONMENT_SENSOR 1
 #define ENABLE_MODE_SWITCH 1
 

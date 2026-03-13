@@ -115,6 +115,12 @@ public:
     int getBatteryPercentage();
 
     /**
+     * @brief Obtiene el voltaje actual de batería.
+     * @return Voltaje en V, o -1.0f si no está inicializado.
+     */
+    float getBatteryVoltage();
+
+    /**
      * @brief Obtiene las lecturas actuales del sensor ambiental.
      * @return Estructura EnvData con temperatura, humedad, presión y flag de validez.
      */
@@ -162,6 +168,7 @@ private:
     bool _isInPowerOffState = false;  // True when PowerOffState is active, signals GPIO monitoring
     bool _powerSwitchOffEventLatched = false;  // One-shot latch while power switch stays LOW
     bool _powerOffReadyEventLatched = false;   // One-shot latch for EVENT_POWEROFF_READY_TO_SLEEP
+    bool _batteryCriticalShutdownTriggered = false; // One-shot latch for critical battery shutdown
 
     // --- Estado de Actuadores ---
     struct ActuatorState {
@@ -213,6 +220,8 @@ private:
     void setLedPattern(LedPattern pattern);
     void startLedSequence(LedPattern pattern, unsigned long blinkRate);
     void stopLedSequence();
+    void setRgbColor(bool redOn, bool greenOn, bool blueOn);
+    void blinkRedAndShutdown();
 };
 
 #endif // HARDWARE_MANAGER_H

@@ -7,6 +7,7 @@
  * Headers
  ****************************************************************/
 #include <Arduino.h>
+#include <esp_system.h>
 #include "config.h"       // For LOG_... macros
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
@@ -30,6 +31,11 @@
 #define EVENT_LOGGER_LCD_TASK_STACK_SIZE 2048
 #define EVENT_LOGGER_LCD_TASK_PRIORITY 0  // Very low priority
 
+#define TEST_LANZAMIENTOS_SOLENOID_INTERVAL_MS (2UL * 60UL * 1000UL)
+#define TEST_LANZAMIENTOS_BATTERY_CRITICAL_PERCENT 15
+#define TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY 0xBADA5501UL
+#define TEST_LANZAMIENTOS_MAX_DISPAROS 60
+
 /****************************************************************
  * Global Variables
  ****************************************************************/
@@ -39,6 +45,16 @@ SupabaseClient* g_supabaseClient = nullptr;
 HardwareManager* g_hardwareManager = nullptr;
 WebServerManager* g_webServerManager = nullptr;
 EventLogger* g_eventLogger = nullptr;
+
+RTC_DATA_ATTR uint32_t g_bootMarker = 0;
+
+static bool g_debugManualStarted = false;
+static bool g_debugBatteryStopLatched = false;
+static bool g_debugFlowInitialized = false;
+static bool g_debugFlowFinished = false;
+static unsigned long g_debugFlowStartAt = 0;
+static unsigned long g_debugLastShotAt = 0;
+static uint32_t g_debugShotsFired = 0;
 
 /****************************************************************
  * Task Function Prototypes
@@ -52,6 +68,12 @@ void stateManagerTask(void* parameter);
  * @brief The FreeRTOS task that runs the UserInterface (HW) updates.
  */
 void userInterfaceTask(void* parameter);
+
+#if TEST_LANZAMIENTOS == 1
+static void runModoDebugTest();
+static void finishTestAndReturnToConfig(bool success, const String& detail);
+#endif
+static void reportBootCause();
 
 #if EVENT_LOGGER_LCD_ENABLED
 /**
@@ -103,6 +125,7 @@ void setup() {
     LOG_PRINTLN("EventLogger initialized.");
     EVENT_INFO("Main Boot OK");
 #endif
+    reportBootCause();
 
     // 6. Create WebServerManager
     g_webServerManager = new WebServerManager();
@@ -155,7 +178,9 @@ void setup() {
     LOG_PRINTLN("EventLogger LCD task created.");
 #endif
 
-    LOG_PRINTLN("Setup complete. FSM task is running.");    
+    LOG_PRINTLN("Setup complete. FSM task is running.");
+
+#if TEST_LANZAMIENTOS == 0
     // --- Instrucciones para el simulador ---
     LOG_PRINTLN("\n--- Event Simulator Ready ---");
     LOG_PRINTLN("Send commands via Serial Monitor (No new line/CR):");
@@ -191,6 +216,9 @@ void setup() {
 
     LOG_PRINTLN("\n--- Write WIFI ---");
     LOG_PRINTLN(" 'W' -> Write WIFI in NVS");
+#else
+    EVENT_INFO("Main:TEST_LANZAMIENTOS ON");
+#endif
     
 }
 
@@ -242,6 +270,9 @@ void eventLoggerLCDTask(void* parameter) {
  * Loop Function
  ****************************************************************/
 void loop() {
+#if TEST_LANZAMIENTOS == 1
+    runModoDebugTest();
+#else
     // Simulate events via Serial input for testing purposes
     #if DEBUG_MODE == 1
         if (Serial.available() > 0) {
@@ -435,8 +466,129 @@ void loop() {
             }
         }
     #endif
+#endif
 
     vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid busy loop
 }
+
+static void reportBootCause() {
+    esp_reset_reason_t reason = esp_reset_reason();
+
+    if (reason == ESP_RST_BROWNOUT) {
+        EVENT_ERROR("Boot:Brownout");
+    } else if (reason == ESP_RST_DEEPSLEEP && g_bootMarker == TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY) {
+        EVENT_WARN("Boot:PrevStop BattCritical");
+    }
+
+    g_bootMarker = 0;
+}
+
+#if TEST_LANZAMIENTOS == 1
+static void runModoDebugTest() {
+    if (g_stateManager == nullptr || g_hardwareManager == nullptr) {
+        return;
+    }
+
+    QueueHandle_t queue = g_stateManager->getEventQueue();
+    if (queue == nullptr) {
+        return;
+    }
+
+    if (g_debugFlowFinished) {
+        return;
+    }
+
+    const unsigned long now = millis();
+    if (!g_debugFlowInitialized) {
+        g_debugFlowInitialized = true;
+        g_debugFlowStartAt = now;
+        EVENT_INFO("Test:Step1 wait 120s");
+        return;
+    }
+
+    if (!g_debugManualStarted) {
+        if ((now - g_debugFlowStartAt) < TEST_LANZAMIENTOS_SOLENOID_INTERVAL_MS) {
+            return;
+        }
+
+        Event ev;
+        ev.type = EVENT_START_MANUAL_PLAY;
+        if (xQueueSend(queue, &ev, 0) == pdTRUE) {
+            g_debugManualStarted = true;
+            g_debugLastShotAt = now;
+            EVENT_INFO("Test:Step1 manual sent");
+        } else {
+            finishTestAndReturnToConfig(false, "Step1 queue full");
+        }
+        return;
+    }
+
+    const int batteryPercent = g_hardwareManager->getBatteryPercentage();
+    if (batteryPercent >= 0 && batteryPercent <= TEST_LANZAMIENTOS_BATTERY_CRITICAL_PERCENT) {
+        if (!g_debugBatteryStopLatched) {
+            g_debugBatteryStopLatched = true;
+            g_bootMarker = TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY;
+            finishTestAndReturnToConfig(false, "Batt critical");
+        }
+        return;
+    }
+
+    if ((now - g_debugLastShotAt) >= TEST_LANZAMIENTOS_SOLENOID_INTERVAL_MS) {
+        ++g_debugShotsFired;
+        const float batteryVoltage = g_hardwareManager->getBatteryVoltage();
+
+        String shotInfo = "Test:Step2 shot #" + String(g_debugShotsFired) +
+                          " batt=" + String(batteryPercent) + "%" +
+                          " v=" + String(batteryVoltage, 2);
+        EVENT_INFO(shotInfo.c_str());
+
+        if (!g_hardwareManager->sendCommand(CMD_SOLENOID_FIRE, 0)) {
+            finishTestAndReturnToConfig(false, "Shot cmd fail");
+            return;
+        }
+
+        g_debugLastShotAt = now;
+
+        if (TEST_LANZAMIENTOS_MAX_DISPAROS > 0 &&
+            g_debugShotsFired >= TEST_LANZAMIENTOS_MAX_DISPAROS) {
+            finishTestAndReturnToConfig(true, "Max shots reached");
+        }
+    }
+}
+
+static void finishTestAndReturnToConfig(bool success, const String& detail) {
+    if (g_debugFlowFinished || g_stateManager == nullptr) {
+        return;
+    }
+
+    g_debugFlowFinished = true;
+
+    String endMsg = "Test:Step4 end ";
+    endMsg += success ? "SUCCESS" : "FAIL";
+    if (detail.length() > 0) {
+        endMsg += " (" + detail + ")";
+    }
+
+    if (success) {
+        EVENT_INFO(endMsg.c_str());
+    } else {
+        EVENT_ERROR(endMsg.c_str());
+    }
+
+    QueueHandle_t queue = g_stateManager->getEventQueue();
+    if (queue == nullptr) {
+        EVENT_ERROR("Test:Step4 no queue");
+        return;
+    }
+
+    Event finishEvent;
+    finishEvent.type = EVENT_PLAY_FINISHED;
+    if (xQueueSend(queue, &finishEvent, 0) != pdTRUE) {
+        EVENT_ERROR("Test:Step4 queue full");
+    } else {
+        EVENT_INFO("Test:Step4 -> Config");
+    }
+}
+#endif
 
 

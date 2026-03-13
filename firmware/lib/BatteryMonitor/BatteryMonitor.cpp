@@ -14,16 +14,17 @@
  ****************************************************************/
 // ADC Configuration
 #define ADC_RESOLUTION 4095.0       ///< ESP32 ADC 12-bit resolution
-#define ADC_REFERENCE_VOLTAGE 3.3   ///< ESP32 ADC reference voltage in volts
 
 // EMA Filter Configuration (Exponential Moving Average)
 #define EMA_ALPHA 0.2               ///< EMA smoothing factor (0.0-1.0)
                                     ///< Lower = more smoothing, Higher = more responsive
 
 // LiPo Battery Voltage Thresholds
-#define LIPO_VOLTAGE_MAX 4.2        ///< Maximum LiPo voltage (fully charged)
+#define LIPO_VOLTAGE_MAX 4.1        ///< Maximum LiPo voltage (fully charged)
 #define LIPO_VOLTAGE_MIN 3.4        ///< Minimum LiPo voltage (safe discharge limit)
-#define LIPO_CRITICAL_PERCENT 10    ///< Critical battery percentage threshold
+#define LIPO_CRITICAL_PERCENT 15    ///< Critical battery percentage threshold
+#define LIPO_LOW_PERCENT 40         ///< Low battery threshold
+#define LIPO_MEDIUM_PERCENT 70      ///< Medium battery threshold
 
 /****************************************************************
  * Class Method Implementations
@@ -47,7 +48,8 @@ bool BatteryMonitor::begin() {
     
     // Initialize EMA filter with first reading
     uint16_t rawValue = analogRead(_pin);
-    _filteredVoltage = (rawValue / ADC_RESOLUTION) * ADC_REFERENCE_VOLTAGE * _multiplier;
+    float adcVolts = analogReadMilliVolts(_pin) / 1000.0f;
+    _filteredVoltage = adcVolts * _multiplier;
     
     // Verify pin configuration
     if (rawValue == 0) {
@@ -66,6 +68,7 @@ BatteryInfo BatteryMonitor::getInfo() {
         LOG_PRINTLN("BatteryMonitor: ERROR - Not initialized!");
         info.voltage = 0.0;
         info.percentage = 0;
+        info.level = BATTERY_LEVEL_CRITICAL;
         info.isCritical = true;
         return info;
     }
@@ -84,6 +87,16 @@ BatteryInfo BatteryMonitor::getInfo() {
     }
     if (info.percentage < 0) {
         info.percentage = 0;
+    }
+
+    if (info.percentage >= LIPO_MEDIUM_PERCENT) {
+        info.level = BATTERY_LEVEL_HIGH;
+    } else if (info.percentage >= LIPO_LOW_PERCENT) {
+        info.level = BATTERY_LEVEL_MEDIUM;
+    } else if (info.percentage >= LIPO_CRITICAL_PERCENT) {
+        info.level = BATTERY_LEVEL_LOW;
+    } else {
+        info.level = BATTERY_LEVEL_CRITICAL;
     }
     
     // Determine critical status
@@ -109,10 +122,15 @@ float BatteryMonitor::getVoltage() {
     
     // Read current ADC value (single reading - non-blocking)
     uint16_t rawValue = analogRead(_pin);
-    
-    // Convert ADC reading to voltage
-    // Formula: (ADC_Reading / ADC_Resolution) * Vref * Multiplier
-    float currentVoltage = (rawValue / ADC_RESOLUTION) * ADC_REFERENCE_VOLTAGE * _multiplier;
+
+    // Convert ADC reading to battery voltage using calibrated ADC millivolts.
+    // Formula: Vbat = Vin_ADC * Multiplier
+    float currentVoltage = (analogReadMilliVolts(_pin) / 1000.0f) * _multiplier;
+
+    // Keep a lightweight guard for disconnected input diagnostics.
+    if (rawValue == 0) {
+        LOG_PRINTLN("BatteryMonitor: Warning - ADC reading is 0.");
+    }
     
     // Apply EMA filter: filtered_n = alpha * current + (1 - alpha) * filtered_(n-1)
     // This provides smooth readings without blocking the task

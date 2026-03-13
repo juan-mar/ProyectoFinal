@@ -60,9 +60,11 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #endif
 
     #if ENABLE_LED_CONTROL
-    pinMode(PIN_LED_CONTROL, OUTPUT);
-    digitalWrite(PIN_LED_CONTROL, LOW);
-    LOG_PRINTLN("  - LED control pin initialized");
+    pinMode(PIN_LED_R, OUTPUT);
+    pinMode(PIN_LED_G, OUTPUT);
+    pinMode(PIN_LED_B, OUTPUT);
+    setRgbColor(false, false, false);
+    LOG_PRINTLN("  - RGB LED pins initialized");
     #endif
 
     #if ENABLE_TAG_READER
@@ -177,7 +179,24 @@ void HardwareManager::updateLeds() {
         unsigned long now = millis();
         if (now - _actuatorState.ledLastToggle >= _actuatorState.ledBlinkRate) {
             _actuatorState.ledCurrentState = !_actuatorState.ledCurrentState;
-            digitalWrite(PIN_LED_CONTROL, _actuatorState.ledCurrentState ? HIGH : LOW);
+            if (_actuatorState.ledCurrentState) {
+                switch (_actuatorState.currentLedPattern) {
+                    case LED_IDLE:
+                        setRgbColor(false, false, true);
+                        break;
+                    case LED_ERROR:
+                        setRgbColor(true, false, false);
+                        break;
+                    case LED_SUCCESS:
+                        setRgbColor(false, true, false);
+                        break;
+                    default:
+                        setRgbColor(true, true, true);
+                        break;
+                }
+            } else {
+                setRgbColor(false, false, false);
+            }
             _actuatorState.ledLastToggle = now;
         }
     }
@@ -305,12 +324,34 @@ void HardwareManager::readSensors() {
     if (now - _lastBatteryReading >= BATTERY_READ_PERIOD_MS) {
         if (_batteryMonitor.isInitialized()) {
             BatteryInfo info = _batteryMonitor.getInfo();
-            
-            // Si la batería es crítica, enviar evento a la FSM
-            if (info.percentage < 10 && info.percentage >= 0) {
-                LOG_PRINTF("[HW] WARNING: Battery critical: %d%%\n", info.percentage);
-                // Event evt = {EVENT_BATTERY_CRITICAL, info.percentage};
-                // xQueueSend(_fsmQueue, &evt, 0);
+
+            const char* levelText = "UNKNOWN";
+            switch ((BatteryLevel)info.level) {
+                case BATTERY_LEVEL_HIGH:
+                    levelText = "HIGH";
+                    break;
+                case BATTERY_LEVEL_MEDIUM:
+                    levelText = "MEDIUM";
+                    break;
+                case BATTERY_LEVEL_LOW:
+                    levelText = "LOW";
+                    break;
+                case BATTERY_LEVEL_CRITICAL:
+                    levelText = "CRITICAL";
+                    break;
+                default:
+                    break;
+            }
+
+            LOG_PRINTF("[HW] Battery level=%s (%d%%, %.2fV)\n", levelText, info.percentage, info.voltage);
+
+            if (info.isCritical && !_batteryCriticalShutdownTriggered) {
+                _batteryCriticalShutdownTriggered = true;
+                LOG_PRINTF("[HW] WARNING: Battery CRITICAL (%d%%). Starting shutdown sequence...\n", info.percentage);
+                EVENT_ERROR("HW:Batt Critical");
+                blinkRedAndShutdown();
+            } else if (!info.isCritical) {
+                _batteryCriticalShutdownTriggered = false;
             }
         }
         _lastBatteryReading = now;
@@ -564,7 +605,7 @@ void HardwareManager::setLedPattern(LedPattern pattern) {
     
     switch (pattern) {
         case LED_OFF:
-            digitalWrite(PIN_LED_CONTROL, LOW);
+            setRgbColor(false, false, false);
             _actuatorState.ledCurrentState = false;
             LOG_PRINTLN("[HW] LED Pattern: OFF");
             break;
@@ -573,7 +614,7 @@ void HardwareManager::setLedPattern(LedPattern pattern) {
             LOG_PRINTLN("[HW] LED Pattern: IDLE");
             break;
         case LED_ACTIVE:
-            digitalWrite(PIN_LED_CONTROL, HIGH);
+            setRgbColor(true, true, true);
             _actuatorState.ledCurrentState = true;
             LOG_PRINTLN("[HW] LED Pattern: ACTIVE");
             break;
@@ -599,7 +640,20 @@ void HardwareManager::startLedSequence(LedPattern pattern, unsigned long blinkRa
     _actuatorState.ledBlinkRate = blinkRate;
     _actuatorState.ledLastToggle = millis();
     _actuatorState.ledCurrentState = true;
-    digitalWrite(PIN_LED_CONTROL, HIGH);
+    switch (pattern) {
+        case LED_IDLE:
+            setRgbColor(false, false, true);
+            break;
+        case LED_ERROR:
+            setRgbColor(true, false, false);
+            break;
+        case LED_SUCCESS:
+            setRgbColor(false, true, false);
+            break;
+        default:
+            setRgbColor(true, true, true);
+            break;
+    }
     LOG_PRINTF("[HW] LED Sequence started (blink rate: %lu ms)\n", blinkRate);
     #endif
 }
@@ -607,10 +661,37 @@ void HardwareManager::startLedSequence(LedPattern pattern, unsigned long blinkRa
 void HardwareManager::stopLedSequence() {
     #if ENABLE_LED_CONTROL
     _actuatorState.ledSequenceRunning = false;
-    digitalWrite(PIN_LED_CONTROL, LOW);
+    setRgbColor(false, false, false);
     _actuatorState.ledCurrentState = false;
     LOG_PRINTLN("[HW] LED Sequence stopped");
     #endif
+}
+
+void HardwareManager::setRgbColor(bool redOn, bool greenOn, bool blueOn) {
+    #if ENABLE_LED_CONTROL
+    digitalWrite(PIN_LED_R, redOn ? HIGH : LOW);
+    digitalWrite(PIN_LED_G, greenOn ? HIGH : LOW);
+    digitalWrite(PIN_LED_B, blueOn ? HIGH : LOW);
+    #else
+    (void)redOn;
+    (void)greenOn;
+    (void)blueOn;
+    #endif
+}
+
+void HardwareManager::blinkRedAndShutdown() {
+    #if ENABLE_LED_CONTROL
+    stopLedSequence();
+
+    for (int i = 0; i < 3; ++i) {
+        setRgbColor(true, false, false);
+        vTaskDelay(pdMS_TO_TICKS(220));
+        setRgbColor(false, false, false);
+        vTaskDelay(pdMS_TO_TICKS(180));
+    }
+    #endif
+
+    enterDeepSleep();
 }
 
 
@@ -714,7 +795,7 @@ void HardwareManager::enterDeepSleep() {
     
     // 1. Apagar todos los periféricos para mínimo consumo
     #if ENABLE_LED_CONTROL
-    digitalWrite(PIN_LED_CONTROL, LOW);
+    setRgbColor(false, false, false);
     #endif
     
     #if ENABLE_SOLENOID
@@ -747,7 +828,10 @@ void HardwareManager::enterDeepSleep() {
     
     // 3. Configurar wakeup SOLO por Power Switch (GPIO14 = HIGH)
     pinMode(PIN_POWER_SWITCH, INPUT);
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_POWER_SWITCH, 1);  // 1 = HIGH level
+    int currentPowerState = digitalRead(PIN_POWER_SWITCH);
+    int wakeLevel = (currentPowerState == HIGH) ? 0 : 1;
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)PIN_POWER_SWITCH, wakeLevel);
+    LOG_PRINTF("[HW] Deep Sleep wakeup level set to %d (current Power Switch=%d)\n", wakeLevel, currentPowerState);
     
     LOG_PRINTLN("[HW] Deep Sleep configured. Waiting for Power Switch HIGH...");
     LOG_FLUSH();
@@ -778,6 +862,16 @@ int HardwareManager::getBatteryPercentage() {
     
     BatteryInfo info = _batteryMonitor.getInfo();
     return info.percentage;
+}
+
+float HardwareManager::getBatteryVoltage() {
+    if (!_batteryMonitor.isInitialized()) {
+        LOG_PRINTLN("[HW] Battery Monitor not initialized");
+        return -1.0f;
+    }
+
+    BatteryInfo info = _batteryMonitor.getInfo();
+    return info.voltage;
 }
 
 EnvData HardwareManager::getEnvironmentData() {
