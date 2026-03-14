@@ -31,16 +31,11 @@ HardwareManager::HardwareManager()
     _actuatorState.launcherActive = false;
     _actuatorState.launcherEN1OnTime = 0;
     _actuatorState.launcherEN2Pending = false;
-
-    _actuatorState.currentLedPattern = LED_OFF;
-    _actuatorState.ledSequenceRunning = false;
-    _actuatorState.ledBlinkRate = 1000;
-    _actuatorState.ledLastToggle = 0;
-    _actuatorState.ledCurrentState = false;
 }
 
 void HardwareManager::init(QueueHandle_t fsmQueue) {
     _fsmQueue = fsmQueue;
+    _messageInterface.begin();
 
     LOG_PRINTLN("HardwareManager: Initializing pins...");
 
@@ -59,13 +54,7 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     LOG_PRINTLN("  - Launcher pins initialized");
     #endif
 
-    #if ENABLE_LED_CONTROL
-    pinMode(PIN_LED_R, OUTPUT);
-    pinMode(PIN_LED_G, OUTPUT);
-    pinMode(PIN_LED_B, OUTPUT);
-    setRgbColor(false, false, false);
-    LOG_PRINTLN("  - RGB LED pins initialized");
-    #endif
+    LOG_PRINTLN("  - MessageInterface initialized");
 
     #if ENABLE_TAG_READER
     LOG_PRINTLN("  - TAG/RFID pins initialized");
@@ -148,7 +137,7 @@ void HardwareManager::update() {
 void HardwareManager::updateActuators() {
     updateSolenoid();
     updateLauncher();
-    updateLeds();
+    updateMessageInterface();
 }
 
 void HardwareManager::updateSolenoid() {
@@ -173,34 +162,8 @@ void HardwareManager::updateLauncher() {
     #endif
 }
 
-void HardwareManager::updateLeds() {
-    #if ENABLE_LED_CONTROL
-    if (_actuatorState.ledSequenceRunning) {
-        unsigned long now = millis();
-        if (now - _actuatorState.ledLastToggle >= _actuatorState.ledBlinkRate) {
-            _actuatorState.ledCurrentState = !_actuatorState.ledCurrentState;
-            if (_actuatorState.ledCurrentState) {
-                switch (_actuatorState.currentLedPattern) {
-                    case LED_IDLE:
-                        setRgbColor(false, false, true);
-                        break;
-                    case LED_ERROR:
-                        setRgbColor(true, false, false);
-                        break;
-                    case LED_SUCCESS:
-                        setRgbColor(false, true, false);
-                        break;
-                    default:
-                        setRgbColor(true, true, true);
-                        break;
-                }
-            } else {
-                setRgbColor(false, false, false);
-            }
-            _actuatorState.ledLastToggle = now;
-        }
-    }
-    #endif
+void HardwareManager::updateMessageInterface() {
+    _messageInterface.update();
 }
 
 void HardwareManager::checkDrivers() {
@@ -463,7 +426,7 @@ void HardwareManager::processCommand(HwMessage msg) {
 
         case CMD_TAG_POWER_OFF:
             #if ENABLE_TAG_READER
-            disableTag();            
+            disableTag();
             #endif
             break;
 
@@ -487,29 +450,13 @@ void HardwareManager::processCommand(HwMessage msg) {
             #endif
             break;
 
-        // --- LED CONTROL ---
-        case CMD_LED_SEQUENCE_START:
-            #if ENABLE_LED_CONTROL
-            startLedSequence((LedPattern)msg.parameter, LED_CALIBRATION_BLINK_RATE_MS);
-            #endif
+        // --- USER MESSAGE INTERFACE ---
+        case CMD_MSG_SET:
+            _messageInterface.setMessage(static_cast<UserMessage>(msg.parameter));
             break;
 
-        case CMD_LED_SEQUENCE_STOP:
-            #if ENABLE_LED_CONTROL
-            stopLedSequence();
-            #endif
-            break;
-
-        case CMD_LED_SET_PATTERN:
-            #if ENABLE_LED_CONTROL
-            setLedPattern((LedPattern)msg.parameter);
-            #endif
-            break;
-
-        case CMD_LED_OFF:
-            #if ENABLE_LED_CONTROL
-            setLedPattern(LED_OFF);
-            #endif
+        case CMD_MSG_OFF:
+            _messageInterface.setMessage(USER_MSG_OFF);
             break;
 
         // --- SOLENOID / REWARD DISPENSER ---
@@ -598,98 +545,9 @@ void HardwareManager::fireSolenoid(unsigned long durationMs) {
     #endif
 }
 
-void HardwareManager::setLedPattern(LedPattern pattern) {
-    #if ENABLE_LED_CONTROL
-    stopLedSequence();  // Detener cualquier secuencia en curso
-    _actuatorState.currentLedPattern = pattern;
-    
-    switch (pattern) {
-        case LED_OFF:
-            setRgbColor(false, false, false);
-            _actuatorState.ledCurrentState = false;
-            LOG_PRINTLN("[HW] LED Pattern: OFF");
-            break;
-        case LED_IDLE:
-            startLedSequence(LED_IDLE, LED_IDLE_BLINK_RATE_MS);
-            LOG_PRINTLN("[HW] LED Pattern: IDLE");
-            break;
-        case LED_ACTIVE:
-            setRgbColor(true, true, true);
-            _actuatorState.ledCurrentState = true;
-            LOG_PRINTLN("[HW] LED Pattern: ACTIVE");
-            break;
-        case LED_ERROR:
-            startLedSequence(LED_ERROR, LED_ERROR_BLINK_RATE_MS);
-            LOG_PRINTLN("[HW] LED Pattern: ERROR");
-            break;
-        case LED_SUCCESS:
-            startLedSequence(LED_SUCCESS, LED_SUCCESS_BLINK_RATE_MS);
-            LOG_PRINTLN("[HW] LED Pattern: SUCCESS");
-            break;
-        default:
-            LOG_PRINTLN("[HW] LED Pattern: UNKNOWN");
-            break;
-    }
-    #endif
-}
-
-void HardwareManager::startLedSequence(LedPattern pattern, unsigned long blinkRate) {
-    #if ENABLE_LED_CONTROL
-    _actuatorState.currentLedPattern = pattern;
-    _actuatorState.ledSequenceRunning = true;
-    _actuatorState.ledBlinkRate = blinkRate;
-    _actuatorState.ledLastToggle = millis();
-    _actuatorState.ledCurrentState = true;
-    switch (pattern) {
-        case LED_IDLE:
-            setRgbColor(false, false, true);
-            break;
-        case LED_ERROR:
-            setRgbColor(true, false, false);
-            break;
-        case LED_SUCCESS:
-            setRgbColor(false, true, false);
-            break;
-        default:
-            setRgbColor(true, true, true);
-            break;
-    }
-    LOG_PRINTF("[HW] LED Sequence started (blink rate: %lu ms)\n", blinkRate);
-    #endif
-}
-
-void HardwareManager::stopLedSequence() {
-    #if ENABLE_LED_CONTROL
-    _actuatorState.ledSequenceRunning = false;
-    setRgbColor(false, false, false);
-    _actuatorState.ledCurrentState = false;
-    LOG_PRINTLN("[HW] LED Sequence stopped");
-    #endif
-}
-
-void HardwareManager::setRgbColor(bool redOn, bool greenOn, bool blueOn) {
-    #if ENABLE_LED_CONTROL
-    digitalWrite(PIN_LED_R, redOn ? HIGH : LOW);
-    digitalWrite(PIN_LED_G, greenOn ? HIGH : LOW);
-    digitalWrite(PIN_LED_B, blueOn ? HIGH : LOW);
-    #else
-    (void)redOn;
-    (void)greenOn;
-    (void)blueOn;
-    #endif
-}
-
 void HardwareManager::blinkRedAndShutdown() {
-    #if ENABLE_LED_CONTROL
-    stopLedSequence();
-
-    for (int i = 0; i < 3; ++i) {
-        setRgbColor(true, false, false);
-        vTaskDelay(pdMS_TO_TICKS(220));
-        setRgbColor(false, false, false);
-        vTaskDelay(pdMS_TO_TICKS(180));
-    }
-    #endif
+    _messageInterface.setMessage(USER_MSG_ERROR);
+    vTaskDelay(pdMS_TO_TICKS(900));
 
     enterDeepSleep();
 }
@@ -794,9 +652,7 @@ void HardwareManager::enterDeepSleep() {
     EVENT_FLUSH();
     
     // 1. Apagar todos los periféricos para mínimo consumo
-    #if ENABLE_LED_CONTROL
-    setRgbColor(false, false, false);
-    #endif
+    _messageInterface.setMessage(USER_MSG_OFF);
     
     #if ENABLE_SOLENOID
     digitalWrite(PIN_SOLENOID, LOW);

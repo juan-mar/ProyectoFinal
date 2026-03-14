@@ -12,6 +12,7 @@
 #include "rx.h"                     // Tu nuevo driver de BLE
 #include "BatteryMonitor.h"         // Battery monitoring
 #include "EnvironmentSensor.h"      // BME280 environment sensor
+#include "MessageInterface.h"       // User messaging output abstraction
 
 /****************************************************************
  * @brief Hardware Command Types
@@ -31,12 +32,10 @@ enum HwCmdType {
     CMD_REMOTE_POWER_ON,            // Encender receptor NRF24
     CMD_REMOTE_POWER_OFF,           // Apagar receptor NRF24
     
-    // --- LEDs Control ---
-    CMD_LED_SEQUENCE_START,         // Iniciar secuencia de LEDs (ej: calibración)
-    CMD_LED_SEQUENCE_STOP,          // Detener secuencia
-    CMD_LED_SET_PATTERN,            // Cambiar patrón LED fijo (parameter: patrón)
-    CMD_LED_OFF,                    // Apagar todos los LEDs
-    
+    // --- User Message Interface ---
+    CMD_MSG_SET,                    // parameter: UserMessage
+    CMD_MSG_OFF,                    // Shortcut a USER_MSG_OFF
+
     // --- Solenoid / Reward Dispenser ---
     CMD_SOLENOID_FIRE,              // Disparar solenoide (entregar reward)
     
@@ -50,18 +49,6 @@ enum HwCmdType {
 #define CMD_TAG_PARAM_CALIBRATION   1
 #define CMD_TAG_PARAM_DETECTION     0
 
-/****************************************************************
- * @brief LED Pattern Types
- * Patrones predefinidos para los LEDs
- ****************************************************************/
-enum LedPattern {
-    LED_OFF = 0,
-    LED_IDLE,                       // Parpadeo lento (standby)
-    LED_CALIBRATION,                // Secuencia parpadeante rápida
-    LED_ACTIVE,                     // LEDs fijos encendidos
-    LED_ERROR,                      // Parpadeo rojo urgente
-    LED_SUCCESS                     // Parpadeo verde rápido
-};
 
 /****************************************************************
  * @brief Hardware Command Message
@@ -69,7 +56,7 @@ enum LedPattern {
  ****************************************************************/
 struct HwMessage {
     HwCmdType command;
-    int parameter;                  // Ej: LedPattern, duración, etc.
+    int parameter;                  // Parámetro genérico del comando
     unsigned long timestamp;        // Timestamp del comando
 };
 
@@ -141,6 +128,7 @@ private:
     // Drivers Internos
     RemoteControl _remoteControl;
     Receptor _bleScanner;
+    MessageInterface _messageInterface;
     BatteryMonitor _batteryMonitor{PIN_BATTERY, BATTERY_MULTIPLIER};
     EnvironmentSensor _environmentSensor;
 
@@ -180,12 +168,6 @@ private:
         bool launcherActive;        // Lanzador encendido
         unsigned long launcherEN1OnTime; // Cuándo se encendió EN_1
         bool launcherEN2Pending;    // Espera para encender EN_2
-        
-        LedPattern currentLedPattern;   // Patrón LED actual
-        bool ledSequenceRunning;    // Secuencia de LEDs en curso
-        unsigned long ledBlinkRate; // Velocidad de parpadeo
-        unsigned long ledLastToggle;    // Último cambio de LED
-        bool ledCurrentState;       // Estado actual (on/off)
     } _actuatorState;
 
     // --- Timing ---
@@ -197,7 +179,7 @@ private:
     
     // --- Actuators
     void updateActuators();
-    void updateLeds();
+    void updateMessageInterface();
     void updateSolenoid();
     void updateLauncher();
     
@@ -217,10 +199,6 @@ private:
     void enableTag(bool mode = false);  // mode: false=detección, true=calibración
     void disableTag();
     void fireSolenoid(unsigned long durationMs = SOLENOID_PULSE_DURATION_MS);
-    void setLedPattern(LedPattern pattern);
-    void startLedSequence(LedPattern pattern, unsigned long blinkRate);
-    void stopLedSequence();
-    void setRgbColor(bool redOn, bool greenOn, bool blueOn);
     void blinkRedAndShutdown();
 };
 

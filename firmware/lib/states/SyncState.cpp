@@ -78,7 +78,7 @@ void syncTaskFunction(void* parameter) {
     HardwareManager* hw = params->hardwareManager;
     
     //Send CMD
-    //hw->setLedPattern(LED_SYNCING);
+    hw->sendCommand(CMD_MSG_SET, USER_MSG_SYNCING);
 
     String accessToken = "";
     bool syncFailed = false;

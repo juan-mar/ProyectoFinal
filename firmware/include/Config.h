@@ -28,6 +28,16 @@
 #define PIN_DEBUG_MODE 1
 #define TEST_LANZAMIENTOS 0
 
+/****************************************************************
+ * Logger Macros (The smart part)
+ ****************************************************************/
+#if TEST_LANZAMIENTOS == 1
+ #define TEST_LANZAMIENTOS_SOLENOID_INTERVAL_MS (2UL * 60UL * 1000UL)
+#define TEST_LANZAMIENTOS_BATTERY_CRITICAL_PERCENT 15
+#define TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY 0xBADA5501UL
+#define TEST_LANZAMIENTOS_MAX_DISPAROS 60
+#endif
+
 
 /****************************************************************
  * Logger Macros (The smart part)

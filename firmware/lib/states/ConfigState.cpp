@@ -64,6 +64,7 @@ void ConfigState::execute(StateManager* manager) {
         webServer->begin();
         firstTime = true;
         LOG_PRINTLN("ConfigState: Web server started (launcher already active from PowerUpState)");
+        manager->getHardwareManager()->sendCommand(CMD_MSG_SET,USER_MSG_ACTIVE);
     }
 
     Event event;

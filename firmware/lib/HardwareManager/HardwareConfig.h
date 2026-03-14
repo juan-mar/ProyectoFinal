@@ -42,6 +42,7 @@
 #define PIN_LED_R 25
 #define PIN_LED_G 26
 #define PIN_LED_B 27
+#define LED_ACTIVE_HIGH 1
 
 #define PWM_CHANNEL_LED 0
 #define PWM_FREQUENCY_LED 1000     // Hz

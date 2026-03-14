@@ -31,11 +31,6 @@
 #define EVENT_LOGGER_LCD_TASK_STACK_SIZE 2048
 #define EVENT_LOGGER_LCD_TASK_PRIORITY 0  // Very low priority
 
-#define TEST_LANZAMIENTOS_SOLENOID_INTERVAL_MS (2UL * 60UL * 1000UL)
-#define TEST_LANZAMIENTOS_BATTERY_CRITICAL_PERCENT 15
-#define TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY 0xBADA5501UL
-#define TEST_LANZAMIENTOS_MAX_DISPAROS 60
-
 /****************************************************************
  * Global Variables
  ****************************************************************/
@@ -198,10 +193,9 @@ void setup() {
     LOG_PRINTLN(" 'C' -> TAG calibration mode");
     LOG_PRINTLN(" 'R' -> Remote NRF24 power ON");
     LOG_PRINTLN(" 'r' -> Remote NRF24 power OFF");
-    LOG_PRINTLN(" 'L' -> LED pattern: ACTIVE");
-    LOG_PRINTLN(" 'l' -> LED pattern: OFF");
-    LOG_PRINTLN(" 'E' -> LED pattern: ERROR");
-    LOG_PRINTLN(" 'S' -> LED pattern: SUCCESS");
+    LOG_PRINTLN(" 'L' -> User message: ACTIVE");
+    LOG_PRINTLN(" 'E' -> User message: ERROR");
+    LOG_PRINTLN(" 'S' -> User message: SUCCESS");
     LOG_PRINTLN(" 'A' -> Solenoid fire");
     LOG_PRINTLN(" 'F' -> Launcher fire");
     LOG_PRINTLN(" 'B' -> BLE Scanner ON");
@@ -345,19 +339,19 @@ void loop() {
                     LOG_PRINTLN("[TEST] CMD_REMOTE_POWER_OFF sent");
                     break;
                 case 'L': // LED Active
-                    g_hardwareManager->sendCommand(CMD_LED_SET_PATTERN, LED_ACTIVE);
+                    g_hardwareManager->sendCommand(CMD_MSG_SET, USER_MSG_ACTIVE);
                     sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_LED_SET_PATTERN sent (ACTIVE)");
+                    LOG_PRINTLN("[TEST] CMD_MSG_SET sent (ACTIVE)");
                     break;
                 case 'E': // LED Error
-                    g_hardwareManager->sendCommand(CMD_LED_SET_PATTERN, LED_ERROR);
+                    g_hardwareManager->sendCommand(CMD_MSG_SET, USER_MSG_ERROR);
                     sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_LED_SET_PATTERN sent (ERROR)");
+                    LOG_PRINTLN("[TEST] CMD_MSG_SET sent (ERROR)");
                     break;
                 case 'S': // LED Success
-                    g_hardwareManager->sendCommand(CMD_LED_SET_PATTERN, LED_SUCCESS);
+                    g_hardwareManager->sendCommand(CMD_MSG_SET, USER_MSG_SUCCESS);
                     sendEvent = false;
-                    LOG_PRINTLN("[TEST] CMD_LED_SET_PATTERN sent (SUCCESS)");
+                    LOG_PRINTLN("[TEST] CMD_MSG_SET sent (SUCCESS)");
                     break;
                 case 'A': // Solenoid Fire
                     g_hardwareManager->sendCommand(CMD_SOLENOID_FIRE, 0);
@@ -476,10 +470,12 @@ static void reportBootCause() {
 
     if (reason == ESP_RST_BROWNOUT) {
         EVENT_ERROR("Boot:Brownout");
-    } else if (reason == ESP_RST_DEEPSLEEP && g_bootMarker == TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY) {
+    } 
+    #if TEST_LANZAMIENTOS == 1
+    else if (reason == ESP_RST_DEEPSLEEP && g_bootMarker == TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY) {
         EVENT_WARN("Boot:PrevStop BattCritical");
     }
-
+    #endif
     g_bootMarker = 0;
 }
 

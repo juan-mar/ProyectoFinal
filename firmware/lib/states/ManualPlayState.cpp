@@ -34,7 +34,9 @@ void ManualPlayState::enter(StateManager* manager) {
     // 1. Inicializar HW del control remoto
     LOG_PRINTF("[Manual][t=%lu] Enviando comando CMD_REMOTE_POWER_ON...\n", millis());
     manager->getHardwareManager()->sendCommand(CMD_REMOTE_POWER_ON);
+    manager->getHardwareManager()->sendCommand(CMD_MSG_SET,USER_MSG_IDLE);
     
+
     // 2. Esperar estabilización
     vTaskDelay(50 / portTICK_PERIOD_MS);
     roundStartMillis = millis();

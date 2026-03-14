@@ -39,30 +39,20 @@ IdleState::IdleState(){
 void IdleState::enter(StateManager* manager) {
     LOG_PRINTLN("FSM: Entering IdleState...");
 
-    // Apagar LEDs visualmente antes de dormir (Opcional, o mandar comando CMD_LEDS_OFF)
-    // manager->getHardware()->sendCommand(CMD_SET_LED_PATTERN, LED_OFF);
+    manager->getHardwareManager()->sendCommand(CMD_MSG_OFF, 0);
 
-    // 1. Delegar el sueño al HardwareManager
-    // Esta línea detiene la FSM hasta que alguien mueva el interruptor
     Event wakeupEvent = manager->getHardwareManager()->enterLightSleep();
 
-    // 2. Al volver, ya tenemos el evento cocinado. Lo enviamos a la cola.
-    // (Opcional: Podrías procesarlo directo, pero enviarlo a la cola mantiene el flujo 'execute')
     LOG_PRINTF("FSM: Woke up with event type: %d\n", wakeupEvent.type);
     
     xQueueSend(manager->getEventQueue(), &wakeupEvent, 0);
-    
-    // La FSM saldrá de IdleState en la próxima vuelta del loop execute()
-    // cuando lea este evento de la cola.
+    LOG_PRINTLN("FSM: Event sent to queue, exiting enter() method.");
 }
 
 void IdleState::execute(StateManager* manager) {
     Event event;
     QueueHandle_t queue = manager->getEventQueue();
 
-    // Este estado es puramente reactivo. Duerme (la tarea)
-    // indefinidamente hasta que el evento de 'enter()' (después
-    // de despertar) o cualquier otro evento llegue.
     if (xQueueReceive(queue, &event, portMAX_DELAY) == pdTRUE) {
         handleEvent(manager, event);
     }
@@ -108,6 +98,5 @@ void IdleState::handleEvent(StateManager* manager, Event& event) {
 }
 
 void IdleState::update(StateManager* manager) {
-    // Este estado no tiene lógica periódica.
-    // El 'execute()' nunca lo llama.
+
 }
