@@ -51,6 +51,10 @@ static unsigned long g_debugFlowStartAt = 0;
 static unsigned long g_debugLastShotAt = 0;
 static uint32_t g_debugShotsFired = 0;
 
+#if TEST_LITTLEFS_CAPACITY == 1
+static uint32_t g_lfsTestNextMinuteIndex = 0;
+#endif
+
 /****************************************************************
  * Task Function Prototypes
  ****************************************************************/
@@ -68,6 +72,20 @@ void userInterfaceTask(void* parameter);
 static void runModoDebugTest();
 static void finishTestAndReturnToConfig(bool success, const String& detail);
 #endif
+
+#if TEST_LITTLEFS_CAPACITY == 1
+static bool isLeapYear(int year);
+static int getDaysInMonth(int year, int month);
+static String buildIsoMinuteFromBase(uint32_t minuteIndex);
+static String buildSessionPathFromMinuteIndex(uint32_t minuteIndex);
+static bool parseSessionMinuteFromPath(const String& path, int64_t& outMinute);
+static bool buildDeterministicSession(uint32_t minuteIndex, String& outIso, String& outJson);
+static void printLittleFSCapacityInfo();
+static void listSessionNamesAndCheckContinuity();
+static void dumpSessionCsvOverUart();
+static void runLittleFSCapacityFill();
+#endif
+
 static void reportBootCause();
 
 #if EVENT_LOGGER_LCD_ENABLED
@@ -207,6 +225,15 @@ void setup() {
     LOG_PRINTLN(" 'V' -> Validate all session files and clean if needed (TEST)");
     LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
     LOG_PRINTLN(" 'l' -> List local dog_list.json content");
+
+#if TEST_LITTLEFS_CAPACITY == 1
+    LOG_PRINTLN(" 'i' -> LittleFS capacity info + next deterministic ISO");
+    LOG_PRINTLN(" 'k' -> List session file names + continuity check");
+    LOG_PRINTLN(" 'u' -> Dump /sessions as CSV over UART");
+    LOG_PRINTLN(" 'n' -> Save 1 deterministic session (start 2027-01-01T00:00:00.000Z)");
+    LOG_PRINTLN(" 'N' -> Save deterministic sessions until failure or max");
+    LOG_PRINTLN(" 'y' -> Reset deterministic minute index to 0");
+#endif
 
     LOG_PRINTLN("\n--- Write WIFI ---");
     LOG_PRINTLN(" 'W' -> Write WIFI in NVS");
@@ -372,8 +399,15 @@ void loop() {
                     dummySession.setDeviceCode(g_dataManager->getDeviceID()); // Usa el ID real guardado
 
                     if (dummySession.serialize(jsonStr)) {
-                        g_dataManager->saveSessionFile(jsonStr, dummySession.getStartedAt());
-                        LOG_PRINTLN("[Test] Session saved to LittleFS.");
+                        SessionSaveStatus saveStatus = SESSION_SAVE_OK;
+                        String savedPath;
+                        if (g_dataManager->saveSessionFile(jsonStr, dummySession.getStartedAt(), &saveStatus, &savedPath)) {
+                            LOG_PRINTF("[Test] Session saved to LittleFS: %s\n", savedPath.c_str());
+                        } else {
+                            LOG_PRINTF("[Test] Save failed (%s) path=%s\n",
+                                       DataManager::sessionSaveStatusToString(saveStatus),
+                                       savedPath.c_str());
+                        }
                     }
                 break;
 
@@ -436,6 +470,66 @@ void loop() {
                     g_dataManager->saveWifiCredentials(WIFI_SSID,WIFI_PASS);
                     LOG_PRINTLN("--- Saved Wifi ---");
                 break;        
+
+#if TEST_LITTLEFS_CAPACITY == 1
+                case 'i':
+                    printLittleFSCapacityInfo();
+                    sendEvent = false;
+                    break;
+
+                case 'k':
+                    listSessionNamesAndCheckContinuity();
+                    sendEvent = false;
+                    break;
+
+                case 'u':
+                    dumpSessionCsvOverUart();
+                    sendEvent = false;
+                    break;
+
+                case 'n':
+                    {
+                        String iso;
+                        String sessionJson;
+                        if (!buildDeterministicSession(g_lfsTestNextMinuteIndex, iso, sessionJson)) {
+                            LOG_PRINTLN("[LFS Test] ERROR: Could not build deterministic session JSON.");
+                            sendEvent = false;
+                            break;
+                        }
+
+                        SessionSaveStatus saveStatus = SESSION_SAVE_OK;
+                        String savedPath;
+                        if (g_dataManager->saveSessionFile(sessionJson, iso, &saveStatus, &savedPath)) {
+                            LOG_PRINTF("[LFS Test] Saved #%u at %s -> %s\n",
+                                       static_cast<unsigned>(g_lfsTestNextMinuteIndex),
+                                       iso.c_str(),
+                                       savedPath.c_str());
+                            g_lfsTestNextMinuteIndex++;
+                        } else {
+                            LOG_PRINTF("[LFS Test] Save failed at #%u (%s) iso=%s path=%s\n",
+                                       static_cast<unsigned>(g_lfsTestNextMinuteIndex),
+                                       DataManager::sessionSaveStatusToString(saveStatus),
+                                       iso.c_str(),
+                                       savedPath.c_str());
+                        }
+                        printLittleFSCapacityInfo();
+                    }
+                    sendEvent = false;
+                    break;
+
+                case 'N':
+                    runLittleFSCapacityFill();
+                    sendEvent = false;
+                    break;
+
+                case 'y':
+                    g_lfsTestNextMinuteIndex = 0;
+                    LOG_PRINTLN("[LFS Test] Deterministic minute index reset to 0.");
+                    printLittleFSCapacityInfo();
+                    sendEvent = false;
+                    break;
+#endif
+
                 case '-':   //format LittleFS (CUIDADO: Borra todo lo guardado en LittleFS)
                     LOG_PRINTLN("\n[Test] Formatting LittleFS...");
                     if (LittleFS.format()) {
@@ -443,6 +537,9 @@ void loop() {
                     } else {
                         LOG_PRINTLN("[Test] ERROR: Failed to format LittleFS!");
                     }
+#if TEST_LITTLEFS_CAPACITY == 1
+                    g_lfsTestNextMinuteIndex = 0;
+#endif
                     sendEvent = false;
                     break;
 
@@ -464,6 +561,445 @@ void loop() {
 
     vTaskDelay(50 / portTICK_PERIOD_MS); // Small delay to avoid busy loop
 }
+
+#if TEST_LITTLEFS_CAPACITY == 1
+static bool isLeapYear(int year) {
+    return ((year % 4) == 0 && (year % 100) != 0) || ((year % 400) == 0);
+}
+
+static int getDaysInMonth(int year, int month) {
+    static const int daysByMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    if (month == 2 && isLeapYear(year)) {
+        return 29;
+    }
+    return daysByMonth[month - 1];
+}
+
+static String buildIsoMinuteFromBase(uint32_t minuteIndex) {
+    int year = 2027;
+    int month = 1;
+    int day = 1;
+    int hour = static_cast<int>((minuteIndex / 60U) % 24U);
+    int minute = static_cast<int>(minuteIndex % 60U);
+
+    uint32_t daysToAdd = minuteIndex / (24U * 60U);
+    while (daysToAdd > 0) {
+        int dim = getDaysInMonth(year, month);
+        if (day < dim) {
+            day++;
+        } else {
+            day = 1;
+            month++;
+            if (month > 12) {
+                month = 1;
+                year++;
+            }
+        }
+        --daysToAdd;
+    }
+
+    char iso[32];
+    snprintf(iso,
+             sizeof(iso),
+             "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+             year,
+             month,
+             day,
+             hour,
+             minute,
+             0,
+             0);
+    return String(iso);
+}
+
+static String buildSessionPathFromMinuteIndex(uint32_t minuteIndex) {
+    String iso = buildIsoMinuteFromBase(minuteIndex);
+    iso.replace(":", "-");
+    iso.replace(".", "-");
+    return String("/sessions/") + iso + ".json";
+}
+
+static bool parseSessionMinuteFromPath(const String& path, int64_t& outMinute) {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    int millis = 0;
+
+    int parsed = sscanf(path.c_str(),
+                        "/sessions/%d-%d-%dT%d-%d-%d-%dZ.json",
+                        &year,
+                        &month,
+                        &day,
+                        &hour,
+                        &minute,
+                        &second,
+                        &millis);
+    if (parsed != 7) {
+        return false;
+    }
+
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        return false;
+    }
+
+    int dim = getDaysInMonth(year, month);
+    if (day > dim) {
+        return false;
+    }
+
+    int64_t days = 0;
+    for (int y = 1970; y < year; ++y) {
+        days += isLeapYear(y) ? 366 : 365;
+    }
+    for (int m = 1; m < month; ++m) {
+        days += getDaysInMonth(year, m);
+    }
+    days += (day - 1);
+
+    outMinute = days * 24LL * 60LL + static_cast<int64_t>(hour) * 60LL + static_cast<int64_t>(minute);
+    return true;
+}
+
+static bool buildDeterministicSession(uint32_t minuteIndex, String& outIso, String& outJson) {
+    outIso = buildIsoMinuteFromBase(minuteIndex);
+
+    TrainingSession session;
+    session.setDogCode("FIRU-001");
+    session.setStartedAt(outIso);
+    session.setDuration(TEST_LITTLEFS_CAPACITY_DURATION_S);
+    session.setResult("success");
+    session.setConditions("{\"temp\":24.5,\"humidity\":55.0,\"pressure\":1013.2}");
+    session.setType("{\"substance\":\"test\",\"distractors\":false,\"context\":\"capacity_test\"}");
+    session.setDeviceCode(g_dataManager->getDeviceID());
+
+    return session.serialize(outJson);
+}
+
+static void printLittleFSCapacityInfo() {
+    size_t totalBytes = 0;
+    size_t usedBytes = 0;
+    g_dataManager->getStorageUsage(totalBytes, usedBytes);
+    size_t freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
+
+    LOG_PRINTLN("\n[LFS Test] ---- Storage Info ----");
+    LOG_PRINTF("[LFS Test] Total: %u bytes\n", static_cast<unsigned>(totalBytes));
+    LOG_PRINTF("[LFS Test] Used : %u bytes\n", static_cast<unsigned>(usedBytes));
+    LOG_PRINTF("[LFS Test] Free : %u bytes\n", static_cast<unsigned>(freeBytes));
+    LOG_PRINTF("[LFS Test] Pending sessions: %d\n", g_dataManager->countPendingSessions());
+    LOG_PRINTF("[LFS Test] Next minute index: %u\n", static_cast<unsigned>(g_lfsTestNextMinuteIndex));
+    LOG_PRINTF("[LFS Test] Next ISO: %s\n", buildIsoMinuteFromBase(g_lfsTestNextMinuteIndex).c_str());
+}
+
+static void listSessionNamesAndCheckContinuity() {
+    LOG_PRINTLN("\n[LFS Test] ---- Session Files ----");
+
+    SemaphoreHandle_t mutex = g_dataManager->getMutex();
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        LOG_PRINTLN("[LFS Test] ERROR: Could not acquire storage mutex.");
+        return;
+    }
+
+    File root = g_dataManager->openSessionDirectory();
+    if (!root) {
+        LOG_PRINTLN("[LFS Test] ERROR: Could not open /sessions directory.");
+        xSemaphoreGive(mutex);
+        return;
+    }
+
+    int totalFiles = 0;
+    int parsedFiles = 0;
+    int parseErrors = 0;
+    int gapCount = 0;
+    bool havePrev = false;
+    int64_t prevMinute = 0;
+
+    File file = root.openNextFile();
+    while (file) {
+        if (!file.isDirectory()) {
+            totalFiles++;
+            String path = String(file.path());
+            LOG_PRINTF("[LFS Test] %03d: %s\n", totalFiles, path.c_str());
+
+            int64_t currentMinute = 0;
+            if (parseSessionMinuteFromPath(path, currentMinute)) {
+                parsedFiles++;
+                if (havePrev && currentMinute != (prevMinute + 1LL)) {
+                    gapCount++;
+                    LOG_PRINTF("[LFS Test]   gap/non-1min jump detected (delta=%d min)\n",
+                               static_cast<int>(currentMinute - prevMinute));
+                }
+                prevMinute = currentMinute;
+                havePrev = true;
+            } else {
+                parseErrors++;
+                LOG_PRINTLN("[LFS Test]   warning: filename not parseable as deterministic timestamp");
+            }
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+
+    root.close();
+    xSemaphoreGive(mutex);
+
+    uint32_t consecutiveFromBase = 0;
+    while (LittleFS.exists(buildSessionPathFromMinuteIndex(consecutiveFromBase))) {
+        consecutiveFromBase++;
+    }
+
+    LOG_PRINTLN("[LFS Test] ---- Continuity Summary ----");
+    LOG_PRINTF("[LFS Test] Total files in /sessions: %d\n", totalFiles);
+    LOG_PRINTF("[LFS Test] Parsed deterministic names: %d\n", parsedFiles);
+    LOG_PRINTF("[LFS Test] Parse errors: %d\n", parseErrors);
+    LOG_PRINTF("[LFS Test] Non-1min jumps in listed order: %d\n", gapCount);
+    LOG_PRINTF("[LFS Test] Consecutive deterministic files from base index 0: %u\n",
+               static_cast<unsigned>(consecutiveFromBase));
+    LOG_PRINTF("[LFS Test] First missing deterministic index: %u\n",
+               static_cast<unsigned>(consecutiveFromBase));
+    LOG_PRINTF("[LFS Test] First missing deterministic ISO: %s\n",
+               buildIsoMinuteFromBase(consecutiveFromBase).c_str());
+}
+
+static void dumpSessionCsvOverUart() {
+    LOG_PRINTLN("[LFS CSV] BEGIN");
+    LOG_PRINTLN("row,path,size_bytes,deterministic_index,iso_from_name,continuity_from_prev");
+
+    int64_t baseMinute = 0;
+    const bool hasBaseMinute = parseSessionMinuteFromPath(buildSessionPathFromMinuteIndex(0), baseMinute);
+
+    SemaphoreHandle_t mutex = g_dataManager->getMutex();
+    if (xSemaphoreTake(mutex, portMAX_DELAY) != pdTRUE) {
+        LOG_PRINTLN("[LFS CSV] ERROR,mutex");
+        LOG_PRINTLN("[LFS CSV] END");
+        return;
+    }
+
+    File root = g_dataManager->openSessionDirectory();
+    if (!root) {
+        LOG_PRINTLN("[LFS CSV] ERROR,open_sessions_dir");
+        xSemaphoreGive(mutex);
+        LOG_PRINTLN("[LFS CSV] END");
+        return;
+    }
+
+    bool havePrev = false;
+    int64_t prevMinute = 0;
+    int row = 0;
+
+    File file = root.openNextFile();
+    while (file) {
+        if (!file.isDirectory()) {
+            row++;
+            String path = String(file.path());
+            const size_t sizeBytes = file.size();
+
+            int64_t minuteFromName = 0;
+            bool parsed = parseSessionMinuteFromPath(path, minuteFromName);
+
+            String deterministicIndex = "";
+            String isoFromName = "";
+            String continuity = "";
+
+            if (parsed) {
+                if (hasBaseMinute) {
+                    deterministicIndex = String(static_cast<long>(minuteFromName - baseMinute));
+                }
+
+                int year = 0;
+                int month = 0;
+                int day = 0;
+                int hour = 0;
+                int minute = 0;
+                int second = 0;
+                int millis = 0;
+                if (sscanf(path.c_str(),
+                           "/sessions/%d-%d-%dT%d-%d-%d-%dZ.json",
+                           &year,
+                           &month,
+                           &day,
+                           &hour,
+                           &minute,
+                           &second,
+                           &millis) == 7) {
+                    char isoBuf[32];
+                    snprintf(isoBuf,
+                             sizeof(isoBuf),
+                             "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+                             year,
+                             month,
+                             day,
+                             hour,
+                             minute,
+                             second,
+                             millis);
+                    isoFromName = String(isoBuf);
+                }
+
+                if (havePrev) {
+                    continuity = (minuteFromName == (prevMinute + 1LL)) ? "1" : "0";
+                }
+                prevMinute = minuteFromName;
+                havePrev = true;
+            }
+
+            LOG_PRINTF("%d,\"%s\",%u,\"%s\",\"%s\",\"%s\"\n",
+                       row,
+                       path.c_str(),
+                       static_cast<unsigned>(sizeBytes),
+                       deterministicIndex.c_str(),
+                       isoFromName.c_str(),
+                       continuity.c_str());
+        }
+
+        file.close();
+        file = root.openNextFile();
+    }
+
+    root.close();
+    xSemaphoreGive(mutex);
+
+    LOG_PRINTF("[LFS CSV] ROWS,%d\n", row);
+    LOG_PRINTLN("[LFS CSV] END");
+}
+
+static void runLittleFSCapacityFill() {
+    const uint32_t maxFiles = TEST_LITTLEFS_CAPACITY_MAX_FILES;
+    uint32_t createdNow = 0;
+    size_t totalBefore = 0;
+    size_t usedBefore = 0;
+    size_t totalAfter = 0;
+    size_t usedAfter = 0;
+    int pendingBefore = 0;
+    int pendingAfter = 0;
+    size_t accumulatedJsonBytes = 0;
+    size_t accumulatedStoredBytes = 0;
+    SessionSaveStatus stopStatus = SESSION_SAVE_OK;
+    uint32_t stopIndex = g_lfsTestNextMinuteIndex;
+
+    g_dataManager->getStorageUsage(totalBefore, usedBefore);
+    pendingBefore = g_dataManager->countPendingSessions();
+
+    LOG_PRINTLN("\n[LFS Test] Starting fill process...");
+    if (maxFiles == 0) {
+        LOG_PRINTLN("[LFS Test] Mode: until failure.");
+    } else {
+        LOG_PRINTF("[LFS Test] Mode: up to %u new files.\n", static_cast<unsigned>(maxFiles));
+    }
+
+    while (true) {
+        if (maxFiles > 0 && createdNow >= maxFiles) {
+            LOG_PRINTLN("[LFS Test] Reached configured file limit.");
+            break;
+        }
+
+        String iso;
+        String sessionJson;
+        if (!buildDeterministicSession(g_lfsTestNextMinuteIndex, iso, sessionJson)) {
+            LOG_PRINTLN("[LFS Test] ERROR: Failed to serialize deterministic session.");
+            stopStatus = SESSION_SAVE_VERIFY_FAILED;
+            stopIndex = g_lfsTestNextMinuteIndex;
+            break;
+        }
+
+        SessionSaveStatus saveStatus = SESSION_SAVE_OK;
+        String savedPath;
+        bool saved = g_dataManager->saveSessionFile(sessionJson, iso, &saveStatus, &savedPath);
+        if (!saved) {
+            stopStatus = saveStatus;
+            stopIndex = g_lfsTestNextMinuteIndex;
+            LOG_PRINTF("[LFS Test] STOP at index=%u status=%s iso=%s path=%s\n",
+                       static_cast<unsigned>(g_lfsTestNextMinuteIndex),
+                       DataManager::sessionSaveStatusToString(saveStatus),
+                       iso.c_str(),
+                       savedPath.c_str());
+            break;
+        }
+
+        g_lfsTestNextMinuteIndex++;
+        createdNow++;
+        accumulatedJsonBytes += sessionJson.length();
+
+        File storedFile = LittleFS.open(savedPath, "r");
+        if (storedFile) {
+            accumulatedStoredBytes += storedFile.size();
+            storedFile.close();
+        }
+
+        if ((createdNow % 25U) == 0U) {
+            LOG_PRINTF("[LFS Test] Progress: +%u files, next index=%u\n",
+                       static_cast<unsigned>(createdNow),
+                       static_cast<unsigned>(g_lfsTestNextMinuteIndex));
+        }
+    }
+
+    g_dataManager->getStorageUsage(totalAfter, usedAfter);
+    pendingAfter = g_dataManager->countPendingSessions();
+
+    size_t usedDelta = (usedAfter >= usedBefore) ? (usedAfter - usedBefore) : 0;
+    size_t freeAfter = (usedAfter <= totalAfter) ? (totalAfter - usedAfter) : 0;
+
+    float avgBytesByUsedDelta = 0.0f;
+    float avgBytesByJsonSize = 0.0f;
+    float avgBytesByStoredSize = 0.0f;
+    if (createdNow > 0) {
+        avgBytesByUsedDelta = static_cast<float>(usedDelta) / static_cast<float>(createdNow);
+        avgBytesByJsonSize = static_cast<float>(accumulatedJsonBytes) / static_cast<float>(createdNow);
+        avgBytesByStoredSize = static_cast<float>(accumulatedStoredBytes) / static_cast<float>(createdNow);
+    }
+
+    float selectedAvgBytes = 0.0f;
+    const char* estimateSource = "none";
+    if (avgBytesByUsedDelta > 0.0f) {
+        selectedAvgBytes = avgBytesByUsedDelta;
+        estimateSource = "used-delta";
+    } else if (avgBytesByStoredSize > 0.0f) {
+        selectedAvgBytes = avgBytesByStoredSize;
+        estimateSource = "stored-size-fallback";
+    } else if (avgBytesByJsonSize > 0.0f) {
+        selectedAvgBytes = avgBytesByJsonSize;
+        estimateSource = "json-size-fallback";
+    }
+
+    uint32_t estimatedAdditionalByRealAvg = 0;
+    if (selectedAvgBytes > 0.0f) {
+        estimatedAdditionalByRealAvg = static_cast<uint32_t>(
+            static_cast<float>(freeAfter) / selectedAvgBytes
+        );
+    }
+    uint32_t estimatedTotalByRealAvg = static_cast<uint32_t>(pendingAfter) + estimatedAdditionalByRealAvg;
+
+    LOG_PRINTF("[LFS Test] Fill ended. New files created this run: %u\n",
+               static_cast<unsigned>(createdNow));
+    LOG_PRINTLN("[LFS Test] ---- Capacity Estimation ----");
+    LOG_PRINTF("[LFS Test] Pending before/after: %d -> %d\n", pendingBefore, pendingAfter);
+    LOG_PRINTF("[LFS Test] Used delta this run: %u bytes\n", static_cast<unsigned>(usedDelta));
+    LOG_PRINTF("[LFS Test] Avg bytes/session (real used delta): %.2f\n", avgBytesByUsedDelta);
+    LOG_PRINTF("[LFS Test] Avg bytes/session (stored file size): %.2f\n", avgBytesByStoredSize);
+    LOG_PRINTF("[LFS Test] Avg bytes/session (JSON payload only): %.2f\n", avgBytesByJsonSize);
+    LOG_PRINTF("[LFS Test] Estimation source: %s\n", estimateSource);
+
+    if (createdNow > 0 && usedDelta == 0) {
+        LOG_PRINTLN("[LFS Test] NOTE: usedBytes did not change in this run (LittleFS block granularity). Using fallback estimator.");
+    }
+
+    LOG_PRINTF("[LFS Test] Free bytes after run: %u\n", static_cast<unsigned>(freeAfter));
+    LOG_PRINTF("[LFS Test] Estimated additional sessions (real avg): %u\n",
+               static_cast<unsigned>(estimatedAdditionalByRealAvg));
+    LOG_PRINTF("[LFS Test] Estimated total sessions storable (real avg): %u\n",
+               static_cast<unsigned>(estimatedTotalByRealAvg));
+
+    if (createdNow == 0) {
+        LOG_PRINTF("[LFS Test] Stop reason: %s at index=%u\n",
+                   DataManager::sessionSaveStatusToString(stopStatus),
+                   static_cast<unsigned>(stopIndex));
+    }
+
+    printLittleFSCapacityInfo();
+}
+#endif
 
 static void reportBootCause() {
     esp_reset_reason_t reason = esp_reset_reason();

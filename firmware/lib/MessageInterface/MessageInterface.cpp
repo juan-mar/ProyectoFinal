@@ -2,7 +2,7 @@
 #include "HardwareConfig.h"
 
 MessageInterface::MessageInterface()
-    : _activeHigh(LED_ACTIVE_HIGH), _initialized(false),
+    : _activeHigh(LED_ACTIVE), _initialized(false),
       _currentMessage(USER_MSG_OFF), _currentPattern({false, false, false, false, 0}),
       _blinkOnState(false), _lastToggleMs(0) {}
 

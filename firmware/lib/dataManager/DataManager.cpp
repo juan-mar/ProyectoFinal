@@ -184,31 +184,119 @@ String DataManager::readDogList() {
     return content;
 }
 
-bool DataManager::saveSessionFile(String sessionJsonString, String startedAt) {
+const char* DataManager::sessionSaveStatusToString(SessionSaveStatus status) {
+    switch (status) {
+        case SESSION_SAVE_OK: return "OK";
+        case SESSION_SAVE_MUTEX_TIMEOUT: return "MUTEX_TIMEOUT";
+        case SESSION_SAVE_EMPTY_NAME: return "EMPTY_NAME";
+        case SESSION_SAVE_ALREADY_EXISTS: return "ALREADY_EXISTS";
+        case SESSION_SAVE_OPEN_FAILED: return "OPEN_FAILED";
+        case SESSION_SAVE_NO_SPACE: return "NO_SPACE";
+        case SESSION_SAVE_PARTIAL_WRITE: return "PARTIAL_WRITE";
+        case SESSION_SAVE_VERIFY_FAILED: return "VERIFY_FAILED";
+        default: return "UNKNOWN";
+    }
+}
+
+bool DataManager::saveSessionFile(String sessionJsonString,
+                                  String startedAt,
+                                  SessionSaveStatus* outStatus,
+                                  String* outPath) {
     bool success = false;
+    SessionSaveStatus status = SESSION_SAVE_OK;
     
     // Sanitizar el timestamp para usarlo como nombre de archivo
     // Convertir "2024-01-15T10:30:00.000Z" a "2024-01-15T10-30-00-000Z"
     String sanitizedName = startedAt;
     sanitizedName.replace(":", "-");
     sanitizedName.replace(".", "-");
+
+    sanitizedName.trim();
+    if (sanitizedName.length() == 0) {
+        status = SESSION_SAVE_EMPTY_NAME;
+        if (outStatus != nullptr) {
+            *outStatus = status;
+        }
+        return false;
+    }
     
     String path = String(DIR_SESSIONS) + "/" + sanitizedName + ".json";
+    if (outPath != nullptr) {
+        *outPath = path;
+    }
+
+    const size_t expectedBytes = sessionJsonString.length();
 
     if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
         LOG_PRINTF("DataManager: Got mutex, saving session to: %s\n", path.c_str());
+
+        File existingFile = LittleFS.open(path, "r");
+        if (existingFile) {
+            existingFile.close();
+            status = SESSION_SAVE_ALREADY_EXISTS;
+            LOG_PRINTF("DataManager: Refusing overwrite, file already exists: %s\n", path.c_str());
+            xSemaphoreGive(storageMutex);
+            if (outStatus != nullptr) {
+                *outStatus = status;
+            }
+            return false;
+        }
+
+        size_t totalBytes = LittleFS.totalBytes();
+        size_t usedBytes = LittleFS.usedBytes();
+        size_t freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
         
         File file = LittleFS.open(path, "w"); // "w" = Write
         
         if (!file) {
-            LOG_PRINTLN("Failed to create session file.");
+            status = (freeBytes < expectedBytes) ? SESSION_SAVE_NO_SPACE : SESSION_SAVE_OPEN_FAILED;
+            LOG_PRINTF("Failed to create session file. free=%u expected=%u\n",
+                       static_cast<unsigned>(freeBytes),
+                       static_cast<unsigned>(expectedBytes));
         } else {
-            if (file.print(sessionJsonString)) {
-                success = true;
-            }
+            size_t writtenBytes = file.print(sessionJsonString);
+            file.flush();
             file.close();
+
+            if (writtenBytes == expectedBytes) {
+                File verifyFile = LittleFS.open(path, "r");
+                if (!verifyFile) {
+                    status = SESSION_SAVE_VERIFY_FAILED;
+                } else {
+                    size_t storedSize = verifyFile.size();
+                    verifyFile.close();
+                    if (storedSize == expectedBytes) {
+                        status = SESSION_SAVE_OK;
+                        success = true;
+                    } else {
+                        totalBytes = LittleFS.totalBytes();
+                        usedBytes = LittleFS.usedBytes();
+                        freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
+                        status = (freeBytes < (expectedBytes - storedSize))
+                            ? SESSION_SAVE_NO_SPACE
+                            : SESSION_SAVE_VERIFY_FAILED;
+                    }
+                }
+            } else {
+                totalBytes = LittleFS.totalBytes();
+                usedBytes = LittleFS.usedBytes();
+                freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
+                status = (freeBytes < (expectedBytes - writtenBytes))
+                    ? SESSION_SAVE_NO_SPACE
+                    : SESSION_SAVE_PARTIAL_WRITE;
+            }
+
+            if (!success) {
+                LittleFS.remove(path);
+            }
         }
         xSemaphoreGive(storageMutex);
+    } else {
+        status = SESSION_SAVE_MUTEX_TIMEOUT;
+    }
+
+    if (outStatus != nullptr) {
+        *outStatus = status;
     }
     
     return success;

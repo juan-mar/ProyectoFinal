@@ -83,7 +83,7 @@ public:
     /**
      * @brief Pone el sistema en suspensión profunda (deep sleep).
      * Esta función NO RETORNA - el dispositivo se reinicia al despertar.
-     * Consumo mínimo: ~10µA. Despierta SOLO con power switch ON (flanco ascendente).
+      * Consumo mínimo: ~10µA. Despierta SOLO con power switch ON (nivel HIGH).
      */
     void enterDeepSleep();
     

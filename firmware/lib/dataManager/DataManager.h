@@ -32,6 +32,20 @@ enum ValidationResult {
     UNRECOVERABLE           // File has invalid critical fields, must be discarded
 };
 
+/**
+ * @brief Detailed result for session file writes.
+ */
+enum SessionSaveStatus {
+    SESSION_SAVE_OK = 0,
+    SESSION_SAVE_MUTEX_TIMEOUT,
+    SESSION_SAVE_EMPTY_NAME,
+    SESSION_SAVE_ALREADY_EXISTS,
+    SESSION_SAVE_OPEN_FAILED,
+    SESSION_SAVE_NO_SPACE,
+    SESSION_SAVE_PARTIAL_WRITE,
+    SESSION_SAVE_VERIFY_FAILED
+};
+
 // Session validation limits
 #define MIN_SESSION_DURATION_S 5
 #define MAX_SESSION_DURATION_S 3600
@@ -141,7 +155,15 @@ public:
      * @param startedAt The ISO8601 timestamp to use as the filename (e.g., "2024-01-15T10:30:00.000Z").
      * @return true if append was successful.
      */
-    bool saveSessionFile(String sessionJsonString, String startedAt);
+    bool saveSessionFile(String sessionJsonString,
+                         String startedAt,
+                         SessionSaveStatus* outStatus = nullptr,
+                         String* outPath = nullptr);
+
+    /**
+     * @brief Converts SessionSaveStatus to a readable string.
+     */
+    static const char* sessionSaveStatusToString(SessionSaveStatus status);
 
     /**
      * @brief Opens the session directory ("/sessions") for reading.

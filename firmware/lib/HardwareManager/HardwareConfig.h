@@ -10,8 +10,8 @@
  * PIN CONFIGURATION 
  ****************************************************************/
 // --- Mode Switches ---
-#define PIN_MODE_SWITCH_ONLINE_OFFLINE 13  // Online(HIGH)/Offline(LOW) switch
-#define PIN_POWER_SWITCH 14                 // Power ON(HIGH)/OFF(LOW) switch
+#define PIN_MODE_SWITCH_ONLINE_OFFLINE 14  // Online(HIGH)/Offline(LOW) switch
+#define PIN_POWER_SWITCH 13                 // Power ON(HIGH)/OFF(LOW) switch
 
 // --- USB Charging Detection ---
 #define PIN_USB_DETECT 34                   // USB charging detection (HIGH=charging)
@@ -42,7 +42,7 @@
 #define PIN_LED_R 25
 #define PIN_LED_G 26
 #define PIN_LED_B 27
-#define LED_ACTIVE_HIGH 1
+#define LED_ACTIVE 0     // Nivel lógico para encender el LED (1=HIGH, 0=LOW)
 
 #define PWM_CHANNEL_LED 0
 #define PWM_FREQUENCY_LED 1000     // Hz
@@ -122,11 +122,11 @@
  */
 #define ENABLE_TAG_READER 1
 #define ENABLE_REMOTE_CONTROL 1
-#define ENABLE_LED_CONTROL 0
+#define ENABLE_LED_CONTROL 1
 #define ENABLE_SOLENOID 1
 #define ENABLE_LAUNCHER 1
 #define ENABLE_BLE_SCANNER 1
-#define ENABLE_BATTERY_MONITOR 1
+#define ENABLE_BATTERY_MONITOR 0
 #define ENABLE_ENVIRONMENT_SENSOR 1
 #define ENABLE_MODE_SWITCH 1
 

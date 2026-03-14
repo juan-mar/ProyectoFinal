@@ -24,9 +24,10 @@
  * When set to 0, all LOG_... macros are compiled out,
  * saving flash space and execution time.
  */
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 #define PIN_DEBUG_MODE 1
 #define TEST_LANZAMIENTOS 0
+#define TEST_LITTLEFS_CAPACITY 1
 
 /****************************************************************
  * Logger Macros (The smart part)
@@ -36,6 +37,11 @@
 #define TEST_LANZAMIENTOS_BATTERY_CRITICAL_PERCENT 15
 #define TEST_LANZAMIENTOS_BOOT_MARKER_BATTERY 0xBADA5501UL
 #define TEST_LANZAMIENTOS_MAX_DISPAROS 60
+#endif
+
+#if TEST_LITTLEFS_CAPACITY == 1
+#define TEST_LITTLEFS_CAPACITY_MAX_FILES 20
+#define TEST_LITTLEFS_CAPACITY_DURATION_S 60
 #endif
 
 

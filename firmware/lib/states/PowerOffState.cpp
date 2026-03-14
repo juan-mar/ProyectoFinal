@@ -51,7 +51,7 @@ void PowerOffState::handleEvent(StateManager* manager, Event& event) {
             break;
             
         case EVENT_POWEROFF_READY_TO_SLEEP:
-            // Power Switch released (GPIO14 LOW) - ready for deep sleep
+                // Power Switch released (GPIO14 LOW) - ready for deep sleep
             LOG_PRINTLN("[PowerOff] Power Switch released. Entering deep sleep...");
             EVENT_INFO("PwOff:Sleeping");
             
