@@ -183,7 +183,7 @@ void AutoPlayState::saveRun(StateManager* manager, const char* result) {
       
     String json;
     if (currentSession->serialize(json)) {
-        dataManager->saveSessionFile(json, currentSession->getStartedAt());
+        dataManager->saveSessionToChunk(json, currentSession->getStartedAt());
         LOG_PRINTF(">> Run saved with result: %s\n", result);
     }
 }

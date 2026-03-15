@@ -88,6 +88,11 @@ static void runLittleFSCapacityFill();
 
 static void reportBootCause();
 
+static String buildDirtyTestIso();
+static bool saveRawSessionForTest(const String& startedAt,
+                                  const String& rawJson,
+                                  const char* label);
+
 #if EVENT_LOGGER_LCD_ENABLED
 /**
  * @brief The FreeRTOS task that updates the LCD with event logs.
@@ -224,6 +229,9 @@ void setup() {
     LOG_PRINTLN(" 'v' -> print contenido de TODOS los archivos guardados (DEBUG)");
     LOG_PRINTLN(" 'V' -> Validate all session files and clean if needed (TEST)");
     LOG_PRINTLN(" 'w' -> Write a dummy training session to LittleFS");
+    LOG_PRINTLN(" 'h' -> Write a RECOVERABLE dirty session (invalid optional fields)");
+    LOG_PRINTLN(" 'H' -> Write an UNRECOVERABLE dirty session (invalid critical fields)");
+    LOG_PRINTLN(" 'M' -> Write a mixed block: clean + recoverable + unrecoverable + clean");
     LOG_PRINTLN(" 'l' -> List local dog_list.json content");
 
 #if TEST_LITTLEFS_CAPACITY == 1
@@ -267,6 +275,41 @@ void userInterfaceTask(void* parameter) {
         }
         vTaskDelay(HardwareManager::LOOP_PERIOD_MS / portTICK_PERIOD_MS);
     }
+}
+
+static String buildDirtyTestIso() {
+    static uint32_t dirtyCounter = 0;
+    uint32_t idx = dirtyCounter++;
+
+    int seconds = static_cast<int>(idx % 60U);
+    int millis = static_cast<int>((idx * 37U) % 1000U);
+
+    char iso[32];
+    snprintf(iso,
+             sizeof(iso),
+             "2030-01-01T00:00:%02d.%03dZ",
+             seconds,
+             millis);
+    return String(iso);
+}
+
+static bool saveRawSessionForTest(const String& startedAt,
+                                  const String& rawJson,
+                                  const char* label) {
+    SessionSaveStatus saveStatus = SESSION_SAVE_OK;
+    String savedPath;
+    bool saved = g_dataManager->saveSessionToChunk(rawJson, startedAt, &saveStatus, &savedPath);
+
+    if (saved) {
+        LOG_PRINTF("[Dirty Test] %s saved -> %s\n", label, savedPath.c_str());
+    } else {
+        LOG_PRINTF("[Dirty Test] %s save failed (%s) path=%s\n",
+                   label,
+                   DataManager::sessionSaveStatusToString(saveStatus),
+                   savedPath.c_str());
+    }
+
+    return saved;
 }
 
 #if EVENT_LOGGER_LCD_ENABLED
@@ -401,7 +444,7 @@ void loop() {
                     if (dummySession.serialize(jsonStr)) {
                         SessionSaveStatus saveStatus = SESSION_SAVE_OK;
                         String savedPath;
-                        if (g_dataManager->saveSessionFile(jsonStr, dummySession.getStartedAt(), &saveStatus, &savedPath)) {
+                        if (g_dataManager->saveSessionToChunk(jsonStr, dummySession.getStartedAt(), &saveStatus, &savedPath)) {
                             LOG_PRINTF("[Test] Session saved to LittleFS: %s\n", savedPath.c_str());
                         } else {
                             LOG_PRINTF("[Test] Save failed (%s) path=%s\n",
@@ -410,6 +453,89 @@ void loop() {
                         }
                     }
                 break;
+
+                case 'h': // Dirty recoverable session
+                    {
+                        String startedAt = buildDirtyTestIso();
+                        // Valid critical fields + invalid optional values => RECOVERABLE
+                        String recoverableJson = String("{") +
+                            "\"p_dog_code\":\"FIRU-001\"," +
+                            "\"p_started_at\":\"" + startedAt + "\"," +
+                            "\"p_result\":\"success\"," +
+                            "\"p_device_code\":\"" + g_dataManager->getDeviceID() + "\"," +
+                            "\"p_duration_s\":99999," +
+                            "\"p_timeout_s\":99999," +
+                            "\"p_conditions\":{\"temp\":300.0,\"humidity\":-5.0,\"pressure\":10.0}," +
+                            "\"p_type\":\"invalid_type\"" +
+                            "}";
+                        saveRawSessionForTest(startedAt, recoverableJson, "RECOVERABLE");
+                    }
+                    sendEvent = false;
+                    break;
+
+                case 'H': // Dirty unrecoverable session
+                    {
+                        String startedAt = buildDirtyTestIso();
+                        // Invalid critical fields => UNRECOVERABLE
+                        String unrecoverableJson = String("{") +
+                            "\"p_dog_code\":\"\"," +
+                            "\"p_started_at\":\"" + startedAt + "\"," +
+                            "\"p_result\":\"\"," +
+                            "\"p_device_code\":\"" + g_dataManager->getDeviceID() + "\"" +
+                            "}";
+                        saveRawSessionForTest(startedAt, unrecoverableJson, "UNRECOVERABLE");
+                    }
+                    sendEvent = false;
+                    break;
+
+                case 'M': // Mixed block: clean + recoverable + unrecoverable + clean
+                    {
+                        String deviceCode = g_dataManager->getDeviceID();
+
+                        String s1 = buildDirtyTestIso();
+                        String clean1 = String("{") +
+                            "\"p_dog_code\":\"FIRU-001\"," +
+                            "\"p_started_at\":\"" + s1 + "\"," +
+                            "\"p_result\":\"success\"," +
+                            "\"p_device_code\":\"" + deviceCode + "\"," +
+                            "\"p_duration_s\":90" +
+                            "}";
+
+                        String s2 = buildDirtyTestIso();
+                        String recoverable = String("{") +
+                            "\"p_dog_code\":\"FIRU-001\"," +
+                            "\"p_started_at\":\"" + s2 + "\"," +
+                            "\"p_result\":\"success\"," +
+                            "\"p_device_code\":\"" + deviceCode + "\"," +
+                            "\"p_duration_s\":99999," +
+                            "\"p_conditions\":{\"temp\":200.0}" +
+                            "}";
+
+                        String s3 = buildDirtyTestIso();
+                        String unrecoverable = String("{") +
+                            "\"p_dog_code\":\"\"," +
+                            "\"p_started_at\":\"" + s3 + "\"," +
+                            "\"p_result\":\"\"," +
+                            "\"p_device_code\":\"" + deviceCode + "\"" +
+                            "}";
+
+                        String s4 = buildDirtyTestIso();
+                        String clean2 = String("{") +
+                            "\"p_dog_code\":\"FIRU-001\"," +
+                            "\"p_started_at\":\"" + s4 + "\"," +
+                            "\"p_result\":\"success\"," +
+                            "\"p_device_code\":\"" + deviceCode + "\"," +
+                            "\"p_duration_s\":85" +
+                            "}";
+
+                        LOG_PRINTLN("[Dirty Test] Writing mixed block (clean, recoverable, unrecoverable, clean)...");
+                        saveRawSessionForTest(s1, clean1, "MIX-CLEAN-1");
+                        saveRawSessionForTest(s2, recoverable, "MIX-RECOVERABLE");
+                        saveRawSessionForTest(s3, unrecoverable, "MIX-UNRECOVERABLE");
+                        saveRawSessionForTest(s4, clean2, "MIX-CLEAN-2");
+                    }
+                    sendEvent = false;
+                    break;
 
                 case 'p': // Status (Ver pendientes)
                     LOG_PRINTF("\n[Test] Pending Sessions: %d\n", g_dataManager->countPendingSessions());
@@ -499,7 +625,7 @@ void loop() {
 
                         SessionSaveStatus saveStatus = SESSION_SAVE_OK;
                         String savedPath;
-                        if (g_dataManager->saveSessionFile(sessionJson, iso, &saveStatus, &savedPath)) {
+                        if (g_dataManager->saveSessionToChunk(sessionJson, iso, &saveStatus, &savedPath)) {
                             LOG_PRINTF("[LFS Test] Saved #%u at %s -> %s\n",
                                        static_cast<unsigned>(g_lfsTestNextMinuteIndex),
                                        iso.c_str(),
@@ -906,7 +1032,7 @@ static void runLittleFSCapacityFill() {
 
         SessionSaveStatus saveStatus = SESSION_SAVE_OK;
         String savedPath;
-        bool saved = g_dataManager->saveSessionFile(sessionJson, iso, &saveStatus, &savedPath);
+        bool saved = g_dataManager->saveSessionToChunk(sessionJson, iso, &saveStatus, &savedPath);
         if (!saved) {
             stopStatus = saveStatus;
             stopIndex = g_lfsTestNextMinuteIndex;

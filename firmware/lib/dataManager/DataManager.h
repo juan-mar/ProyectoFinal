@@ -57,6 +57,9 @@ enum SessionSaveStatus {
 #define MIN_VALID_PRESSURE_HPA 900.0f
 #define MAX_VALID_PRESSURE_HPA 1100.0f
 
+// Chunk storage settings
+#define MAX_SESSIONS_PER_CHUNK 20
+
 /****************************************************************
  * Class Declarations
  ****************************************************************/
@@ -155,10 +158,10 @@ public:
      * @param startedAt The ISO8601 timestamp to use as the filename (e.g., "2024-01-15T10:30:00.000Z").
      * @return true if append was successful.
      */
-    bool saveSessionFile(String sessionJsonString,
-                         String startedAt,
-                         SessionSaveStatus* outStatus = nullptr,
-                         String* outPath = nullptr);
+    bool saveSessionToChunk(String sessionJsonString,
+                            String startedAt,
+                            SessionSaveStatus* outStatus = nullptr,
+                            String* outChunkPath = nullptr);
 
     /**
      * @brief Converts SessionSaveStatus to a readable string.
@@ -200,6 +203,14 @@ public:
     ValidationResult validateSessionFile(const String &jsonContent);
 
     /**
+     * @brief Validates and sanitizes a session JSON in-memory.
+     * If VALID, outSanitizedJson is identical to input.
+     * If RECOVERABLE, invalid optional fields are removed in outSanitizedJson.
+     * If UNRECOVERABLE, outSanitizedJson is cleared.
+     */
+    ValidationResult sanitizeSessionJson(const String &jsonContent, String &outSanitizedJson);
+
+    /**
      * @brief Cleans invalid optional fields from a session file and re-saves it.
      * Only call this if validateSessionFile() returned RECOVERABLE.
      * @param filePath The path to the session file to clean.
@@ -220,6 +231,13 @@ private:
      * @brief Flag to make init() idempotent.
      */
     bool isInitialized;
+
+    // Active chunk tracked in RAM.
+    String _activeChunkPath;
+    int _activeChunkLineCount;
+
+    // Rebuild active chunk state after boot.
+    void _reconstructActiveChunk();
     
 };
 

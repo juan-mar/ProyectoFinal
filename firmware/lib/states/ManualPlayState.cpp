@@ -229,7 +229,7 @@ void ManualPlayState::saveRun(StateManager* manager, const char* result) {
                    serializeTime, json.length());
         
         unsigned long saveFileStart = millis();
-        if (dataManager->saveSessionFile(json, currentSession->getStartedAt())) {
+        if (dataManager->saveSessionToChunk(json, currentSession->getStartedAt())) {
             unsigned long saveFileTime = millis() - saveFileStart;
             LOG_PRINTF(">> Tiro Manual guardado: %s (archivo: %lu ms)\n", result, saveFileTime);
         } else {

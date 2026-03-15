@@ -18,11 +18,14 @@
 #define KEY_WIFI_SSID "wifi_ssid"
 #define KEY_WIFI_PASS "wifi_pass"
 
+// Safety margin to avoid LittleFS allocator crash near full capacity.
+#define LITTLEFS_SAFE_FREE_HEADROOM_BYTES 8192
+
 /****************************************************************
  * Class Method Implementations
  ****************************************************************/
 
-DataManager::DataManager() : isInitialized(false){
+DataManager::DataManager() : isInitialized(false), _activeChunkLineCount(0) {
     storageMutex = xSemaphoreCreateMutex();
     if (storageMutex == NULL) {
         LOG_PRINTLN("FATAL: Failed to create storageMutex!");
@@ -66,6 +69,7 @@ LOG_PRINTLN("Initializing DataManager...");
             LOG_PRINTLN("Session directory not found, creating...");
             LittleFS.mkdir(DIR_SESSIONS);
         }
+        _reconstructActiveChunk();
         xSemaphoreGive(storageMutex);
     }
     
@@ -75,17 +79,24 @@ LOG_PRINTLN("Initializing DataManager...");
 
 int DataManager::countPendingSessions() {
     int count = 0;
-    LOG_PRINTLN("DataManager: Counting session files...");
+    LOG_PRINTLN("DataManager: Counting pending sessions (chunk lines)...");
 
     if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
-        
         File root = LittleFS.open(DIR_SESSIONS, "r");
         if (root) {
             File file = root.openNextFile();
             while (file) {
-                // Nos aseguramos de que no sea un directorio
                 if (!file.isDirectory()) {
-                    count++;
+                    String name = String(file.name());
+                    if (name.endsWith(".log")) {
+                        while (file.available()) {
+                            String line = file.readStringUntil('\n');
+                            line.trim();
+                            if (line.length() > 0) {
+                                count++;
+                            }
+                        }
+                    }
                 }
                 file.close();
                 file = root.openNextFile();
@@ -94,7 +105,6 @@ int DataManager::countPendingSessions() {
         } else {
             LOG_PRINTLN("DataManager: Failed to open session directory.");
         }
-        
         xSemaphoreGive(storageMutex);
     }
     
@@ -198,110 +208,109 @@ const char* DataManager::sessionSaveStatusToString(SessionSaveStatus status) {
     }
 }
 
-bool DataManager::saveSessionFile(String sessionJsonString,
-                                  String startedAt,
-                                  SessionSaveStatus* outStatus,
-                                  String* outPath) {
+bool DataManager::saveSessionToChunk(String sessionJsonString,
+                                      String startedAt,
+                                      SessionSaveStatus* outStatus,
+                                      String* outChunkPath) {
     bool success = false;
     SessionSaveStatus status = SESSION_SAVE_OK;
-    
-    // Sanitizar el timestamp para usarlo como nombre de archivo
-    // Convertir "2024-01-15T10:30:00.000Z" a "2024-01-15T10-30-00-000Z"
-    String sanitizedName = startedAt;
-    sanitizedName.replace(":", "-");
-    sanitizedName.replace(".", "-");
 
-    sanitizedName.trim();
-    if (sanitizedName.length() == 0) {
-        status = SESSION_SAVE_EMPTY_NAME;
-        if (outStatus != nullptr) {
-            *outStatus = status;
-        }
+    sessionJsonString.trim();
+    if (sessionJsonString.length() == 0) {
+        if (outStatus) *outStatus = SESSION_SAVE_EMPTY_NAME;
         return false;
     }
-    
-    String path = String(DIR_SESSIONS) + "/" + sanitizedName + ".json";
-    if (outPath != nullptr) {
-        *outPath = path;
-    }
-
-    const size_t expectedBytes = sessionJsonString.length();
 
     if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
-        LOG_PRINTF("DataManager: Got mutex, saving session to: %s\n", path.c_str());
 
-        File existingFile = LittleFS.open(path, "r");
-        if (existingFile) {
-            existingFile.close();
-            status = SESSION_SAVE_ALREADY_EXISTS;
-            LOG_PRINTF("DataManager: Refusing overwrite, file already exists: %s\n", path.c_str());
-            xSemaphoreGive(storageMutex);
-            if (outStatus != nullptr) {
-                *outStatus = status;
+        // Runtime format ('-') removes the sessions directory; recreate on demand.
+        if (!LittleFS.exists(DIR_SESSIONS)) {
+            if (!LittleFS.mkdir(DIR_SESSIONS)) {
+                status = SESSION_SAVE_OPEN_FAILED;
+                LOG_PRINTLN("DataManager: Failed to recreate /sessions directory.");
+                xSemaphoreGive(storageMutex);
+                if (outStatus) *outStatus = status;
+                return false;
             }
-            return false;
         }
 
-        size_t totalBytes = LittleFS.totalBytes();
-        size_t usedBytes = LittleFS.usedBytes();
-        size_t freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
-        
-        File file = LittleFS.open(path, "w"); // "w" = Write
-        
-        if (!file) {
-            status = (freeBytes < expectedBytes) ? SESSION_SAVE_NO_SPACE : SESSION_SAVE_OPEN_FAILED;
-            LOG_PRINTF("Failed to create session file. free=%u expected=%u\n",
-                       static_cast<unsigned>(freeBytes),
-                       static_cast<unsigned>(expectedBytes));
+        // Rotate: create a new chunk when the active one is full or missing
+        if (_activeChunkPath.length() == 0 || _activeChunkLineCount >= MAX_SESSIONS_PER_CHUNK) {
+            String sanitized = startedAt;
+            sanitized.replace(":", "-");
+            sanitized.replace(".", "-");
+            sanitized.trim();
+            if (sanitized.length() == 0) sanitized = String(millis());
+            _activeChunkPath = String(DIR_SESSIONS) + "/chunk_" + sanitized + ".log";
+            _activeChunkLineCount = 0;
+            LOG_PRINTF("DataManager: New chunk: %s\n", _activeChunkPath.c_str());
+        }
+
+        // If this is a brand-new chunk, create it explicitly before first append.
+        // This also avoids noisy "does not exist" logs from existence checks.
+        if (_activeChunkLineCount == 0) {
+            _activeChunkLineCount = 0;
+            File createFile = LittleFS.open(_activeChunkPath, "w");
+            if (!createFile) {
+                status = SESSION_SAVE_OPEN_FAILED;
+                LOG_PRINTF("DataManager: Cannot create chunk file: %s\n", _activeChunkPath.c_str());
+                xSemaphoreGive(storageMutex);
+                if (outStatus) *outStatus = status;
+                return false;
+            }
+            createFile.close();
+        }
+
+        if (outChunkPath) *outChunkPath = _activeChunkPath;
+
+        size_t freeBytes = LittleFS.totalBytes() - LittleFS.usedBytes();
+        size_t needed = sessionJsonString.length() + 2; // +2 for newline
+        if (freeBytes < needed || freeBytes <= LITTLEFS_SAFE_FREE_HEADROOM_BYTES) {
+            status = SESSION_SAVE_NO_SPACE;
+            LOG_PRINTF("DataManager: No safe space left! free=%u needed=%u headroom=%u\n",
+                       (unsigned)freeBytes,
+                       (unsigned)needed,
+                       (unsigned)LITTLEFS_SAFE_FREE_HEADROOM_BYTES);
         } else {
-            size_t writtenBytes = file.print(sessionJsonString);
-            file.flush();
-            file.close();
-
-            if (writtenBytes == expectedBytes) {
-                File verifyFile = LittleFS.open(path, "r");
-                if (!verifyFile) {
-                    status = SESSION_SAVE_VERIFY_FAILED;
-                } else {
-                    size_t storedSize = verifyFile.size();
-                    verifyFile.close();
-                    if (storedSize == expectedBytes) {
-                        status = SESSION_SAVE_OK;
-                        success = true;
-                    } else {
-                        totalBytes = LittleFS.totalBytes();
-                        usedBytes = LittleFS.usedBytes();
-                        freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
-                        status = (freeBytes < (expectedBytes - storedSize))
-                            ? SESSION_SAVE_NO_SPACE
-                            : SESSION_SAVE_VERIFY_FAILED;
-                    }
+            File f = LittleFS.open(_activeChunkPath, "a"); // append mode
+            if (!f) {
+                // Chunk may have been deleted externally (e.g. by SyncTask); recreate and retry once.
+                File recreate = LittleFS.open(_activeChunkPath, "w");
+                if (recreate) {
+                    recreate.close();
+                    _activeChunkLineCount = 0;
+                    f = LittleFS.open(_activeChunkPath, "a");
                 }
-            } else {
-                totalBytes = LittleFS.totalBytes();
-                usedBytes = LittleFS.usedBytes();
-                freeBytes = (usedBytes <= totalBytes) ? (totalBytes - usedBytes) : 0;
-                status = (freeBytes < (expectedBytes - writtenBytes))
-                    ? SESSION_SAVE_NO_SPACE
-                    : SESSION_SAVE_PARTIAL_WRITE;
             }
 
-            if (!success) {
-                LittleFS.remove(path);
+            if (!f) {
+                status = SESSION_SAVE_OPEN_FAILED;
+                LOG_PRINTF("DataManager: Cannot open chunk for append: %s\n", _activeChunkPath.c_str());
+            } else {
+                size_t written = f.println(sessionJsonString); // JSON line + \n
+                f.flush();
+                f.close();
+                if (written == 0) {
+                    status = SESSION_SAVE_PARTIAL_WRITE;
+                    LOG_PRINTLN("DataManager: Chunk write returned 0 bytes!");
+                } else {
+                    _activeChunkLineCount++;
+                    success = true;
+                    LOG_PRINTF("DataManager: Appended to %s (%d/%d)\n",
+                               _activeChunkPath.c_str(),
+                               _activeChunkLineCount, MAX_SESSIONS_PER_CHUNK);
+                }
             }
         }
+
         xSemaphoreGive(storageMutex);
     } else {
         status = SESSION_SAVE_MUTEX_TIMEOUT;
     }
 
-    if (outStatus != nullptr) {
-        *outStatus = status;
-    }
-    
+    if (outStatus) *outStatus = status;
     return success;
 }
-
 File DataManager::openSessionDirectory() {
     return LittleFS.open(DIR_SESSIONS, "r");
 }
@@ -513,6 +522,85 @@ ValidationResult DataManager::validateSessionFile(const String &jsonContent) {
     }
 }
 
+ValidationResult DataManager::sanitizeSessionJson(const String &jsonContent, String &outSanitizedJson) {
+    outSanitizedJson = "";
+
+    ValidationResult validation = validateSessionFile(jsonContent);
+    if (validation == UNRECOVERABLE) {
+        return UNRECOVERABLE;
+    }
+
+    if (validation == VALID) {
+        outSanitizedJson = jsonContent;
+        return VALID;
+    }
+
+    // RECOVERABLE: remove invalid optional fields in-memory.
+    DynamicJsonDocument doc(512);
+    if (deserializeJson(doc, jsonContent)) {
+        return UNRECOVERABLE;
+    }
+
+    // p_duration_s
+    if (doc.containsKey("p_duration_s") && doc["p_duration_s"].is<int>()) {
+        int duration = doc["p_duration_s"].as<int>();
+        if (duration < MIN_SESSION_DURATION_S || duration > MAX_SESSION_DURATION_S) {
+            doc.remove("p_duration_s");
+        }
+    }
+
+    // p_timeout_s
+    if (doc.containsKey("p_timeout_s") && doc["p_timeout_s"].is<int>()) {
+        int timeout = doc["p_timeout_s"].as<int>();
+        if (timeout < 0 || timeout > MAX_SESSION_TIMEOUT_S) {
+            doc.remove("p_timeout_s");
+        }
+    }
+
+    // p_conditions
+    if (doc.containsKey("p_conditions")) {
+        if (!doc["p_conditions"].is<JsonObject>()) {
+            doc.remove("p_conditions");
+        } else {
+            JsonObject conditions = doc["p_conditions"];
+            bool conditionsInvalid = false;
+
+            if (conditions.containsKey("temp")) {
+                float temp = conditions["temp"].as<float>();
+                if (temp < MIN_VALID_TEMPERATURE_C || temp > MAX_VALID_TEMPERATURE_C) {
+                    conditionsInvalid = true;
+                }
+            }
+
+            if (conditions.containsKey("humidity")) {
+                float humidity = conditions["humidity"].as<float>();
+                if (humidity < MIN_VALID_HUMIDITY_PCT || humidity > MAX_VALID_HUMIDITY_PCT) {
+                    conditionsInvalid = true;
+                }
+            }
+
+            if (conditions.containsKey("pressure")) {
+                float pressure = conditions["pressure"].as<float>();
+                if (pressure < MIN_VALID_PRESSURE_HPA || pressure > MAX_VALID_PRESSURE_HPA) {
+                    conditionsInvalid = true;
+                }
+            }
+
+            if (conditionsInvalid) {
+                doc.remove("p_conditions");
+            }
+        }
+    }
+
+    // p_type
+    if (doc.containsKey("p_type") && !doc["p_type"].is<JsonObject>()) {
+        doc.remove("p_type");
+    }
+
+    serializeJson(doc, outSanitizedJson);
+    return RECOVERABLE;
+}
+
 bool DataManager::cleanAndSaveSessionFile(String filePath) {
     bool success = false;
     
@@ -636,6 +724,57 @@ bool DataManager::cleanAndSaveSessionFile(String filePath) {
     }
     
     return success;
+}
+
+void DataManager::_reconstructActiveChunk() {
+    _activeChunkPath = "";
+    _activeChunkLineCount = 0;
+
+    File root = LittleFS.open(DIR_SESSIONS, "r");
+    if (!root) return;
+
+    // Find the lexicographically latest .log chunk file.
+    // chunk_<ISO-timestamp> sorts chronologically since ISO dates are lexicographic.
+    String latestName = "";
+    File f = root.openNextFile();
+    while (f) {
+        if (!f.isDirectory()) {
+            String name = String(f.name());
+            if (name.endsWith(".log") && name > latestName) {
+                latestName = name;
+            }
+        }
+        f.close();
+        f = root.openNextFile();
+    }
+    root.close();
+
+    if (latestName.length() == 0) {
+        LOG_PRINTLN("DataManager: No existing chunks found, will create on first save.");
+        return;
+    }
+
+    String latestPath = String(DIR_SESSIONS) + "/" + latestName;
+    File latest = LittleFS.open(latestPath, "r");
+    if (!latest) return;
+
+    int lineCount = 0;
+    while (latest.available()) {
+        String line = latest.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0) lineCount++;
+    }
+    latest.close();
+
+    if (lineCount < MAX_SESSIONS_PER_CHUNK) {
+        _activeChunkPath = latestPath;
+        _activeChunkLineCount = lineCount;
+        LOG_PRINTF("DataManager: Resuming chunk %s (%d/%d lines)\n",
+                   latestPath.c_str(), lineCount, MAX_SESSIONS_PER_CHUNK);
+    } else {
+        LOG_PRINTF("DataManager: Latest chunk %s is full (%d lines). Next save creates new chunk.\n",
+                   latestPath.c_str(), lineCount);
+    }
 }
 
 SemaphoreHandle_t DataManager::getMutex() {

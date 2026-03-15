@@ -143,157 +143,290 @@ void syncTaskFunction(void* parameter) {
         }
     }
 
-    // 4. Sincronizar Archivos
+    // 4. Sincronizar Chunks
     if (!syncFailed && !g_cancelSync) {
         LOG_PRINTLN("[SyncTask] Taking storage mutex...");
-        
-        // Tomar el Mutex para la operación de lectura de archivos
+
         if (xSemaphoreTake(dataManager->getMutex(), portMAX_DELAY) == pdTRUE) {
-            LOG_PRINTLN("[SyncTask] Got mutex. Starting file sync...");
-            
-            bool shouldRepeat = true;     // Flag para reintentar lectura de archivos
-            bool hasErrorIn400Retry = false; // Flag para detectar 400 durante repetición
-            
-            // BUCLE PRINCIPAL: Se repite si hay archivos con error 400 que se limpian
-            while (shouldRepeat && !syncFailed && !g_cancelSync) {
-                LOG_PRINTLN("[SyncTask] ========== SYNC CYCLE START ==========");
-                shouldRepeat = false;  // Por defecto, no hay repetición a menos que haya 400s
-                
+            LOG_PRINTLN("[SyncTask] Got mutex. Starting chunk sync...");
+
+            bool isRetryPass = false;
+
+            // Two-pass loop:
+            //   Pass 1: upload every .log chunk; on 400 keep it.
+            //   Pass 2 (only if pass 1 had any 400): retry kept chunks;
+            //           on 400 again → delete (corrupt data).
+            //   500/timeout at any point → abort immediately.
+            while (!syncFailed && !g_cancelSync) {
+                LOG_PRINTF("[SyncTask] ===== SYNC PASS %s =====\n",
+                           isRetryPass ? "2 (RETRY)" : "1");
+                LOG_PRINTF("[SyncTask] PASS MODE: %s\n",
+                           isRetryPass ? "RAW + PER-ITEM FALLBACK" : "RAW (no local cleaning)");
+                bool hadAny400ThisPass = false;
+
                 File root = dataManager->openSessionDirectory();
                 if (!root) {
                     LOG_PRINTLN("[SyncTask] Failed to open session directory.");
                     break;
                 }
-                
-                File file = root.openNextFile();
-                if (!file) {
-                    LOG_PRINTLN("[SyncTask] No session files to sync.");
-                    root.close();
-                    break;
-                }
-                
-                // BUCLE DE LOTES: Lee archivos en lotes de 5
-                while (file && !syncFailed && !g_cancelSync) {
-                    
-                    // --- INICIO DEL LOTE ---
-                    DynamicJsonDocument batchDoc(4096);
-                    JsonArray p_items = batchDoc.createNestedArray("p_items");
-                    String filePathsToDelete[SYNC_BATCH_SIZE];
-                    int batchCount = 0;
 
-                    // Llenar el lote con hasta 5 archivos
-                    for (int i = 0; i < SYNC_BATCH_SIZE && file && !g_cancelSync; i++) {
-                        String path = file.path();
-                        String sessionJson = file.readString();
-                        file.close();
-
-                        DynamicJsonDocument tempDoc(512);
-                        if (deserializeJson(tempDoc, sessionJson) == DeserializationError::Ok) {
-                            p_items.add(tempDoc.as<JsonObject>());
-                            filePathsToDelete[batchCount] = path;
-                            batchCount++;
-                        } else {
-                            LOG_PRINTF("[SyncTask] ERROR: Corrupt JSON file, deleting: %s\n", path.c_str());
-                            dataManager->deleteSessionFile(path);
-                        }
-                        file = root.openNextFile();
+                File dirEntry = root.openNextFile();
+                while (dirEntry && !syncFailed && !g_cancelSync) {
+                    if (dirEntry.isDirectory()) {
+                        dirEntry.close();
+                        dirEntry = root.openNextFile();
+                        continue;
                     }
 
-                    // Si el lote tiene items, subirlo
-                    if (batchCount > 0 && !g_cancelSync) {
-                        String batchJsonString;
-                        serializeJson(batchDoc, batchJsonString);
-                        
-                        LOG_PRINTF("[SyncTask] [BATCH] Uploading %d sessions...\n", batchCount);
-                        UploadResult uploadResult = supabaseClient->recordTrainingBatch(accessToken, batchJsonString);
-                        
-                        if (uploadResult == UPLOAD_SUCCESS) {
-                            LOG_PRINTLN("[SyncTask] [BATCH] Upload successful. Deleting files...");
-                            for (int i = 0; i < batchCount; i++) {
-                                dataManager->deleteSessionFile(filePathsToDelete[i]);
-                            }
-                        } else if (uploadResult == UPLOAD_VALIDATION_ERROR) {
-                            // HTTP 400: Validación - procesar cada archivo pero NO reintentar ahora
-                            LOG_PRINTLN("[SyncTask] [BATCH] FAILED (400 - Validation Error). Validating and cleaning...");
-                            
-                            bool hasValidOrRecoverable = false;
-                            
-                            for (int i = 0; i < batchCount; i++) {
-                                String filePath = filePathsToDelete[i];
-                                LOG_PRINTF("\n[SyncTask] [VALIDATION] File: %s\n", filePath.c_str());
-                                
-                                File valFile = LittleFS.open(filePath, "r");
-                                if (!valFile) {
-                                    LOG_PRINTF("[SyncTask] ERROR: Cannot read file for validation: %s\n", filePath.c_str());
-                                    continue;
+                    String chunkPath = String(dirEntry.path());
+                    dirEntry.close(); // free dir-entry slot before opening the file
+
+                    String chunkName = chunkPath.substring(chunkPath.lastIndexOf('/') + 1);
+                    if (!chunkName.endsWith(".log")) {
+                        dirEntry = root.openNextFile();
+                        continue;
+                    }
+
+                    LOG_PRINTF("[SyncTask] [CHUNK] %s (pass %s)\n",
+                               chunkName.c_str(), isRetryPass ? "RETRY" : "1");
+
+                    File chunkFile = LittleFS.open(chunkPath, "r");
+                    if (!chunkFile) {
+                        LOG_PRINTF("[SyncTask] Cannot open chunk: %s\n", chunkPath.c_str());
+                        dirEntry = root.openNextFile();
+                        continue;
+                    }
+
+                    // Per-line state in RAM (0=pending, 1=ok, 2=fail). Dies at end of chunk.
+                    int state[MAX_SESSIONS_PER_CHUNK];
+                    memset(state, 0, sizeof(state));
+                    int totalLines = 0;
+
+                    String batchLines[SYNC_BATCH_SIZE];
+                    int    batchIndices[SYNC_BATCH_SIZE];
+                    int    batchCount = 0;
+
+                    // ---- Read lines, upload in batches of SYNC_BATCH_SIZE ----
+                    while (chunkFile.available() && !syncFailed && !g_cancelSync) {
+                        String line = chunkFile.readStringUntil('\n');
+                        line.trim();
+                        if (line.length() == 0) continue;
+                        if (totalLines >= MAX_SESSIONS_PER_CHUNK) {
+                            LOG_PRINTF("[SyncTask] WARNING: chunk exceeds %d lines: %s\n",
+                                       MAX_SESSIONS_PER_CHUNK, chunkName.c_str());
+                            break;
+                        }
+
+                        batchLines[batchCount]   = line;
+                        batchIndices[batchCount] = totalLines;
+                        batchCount++;
+                        totalLines++;
+
+                        if (batchCount == SYNC_BATCH_SIZE) {
+                            DynamicJsonDocument batchDoc(4096);
+                            JsonArray p_items = batchDoc.createNestedArray("p_items");
+                            for (int bi = 0; bi < batchCount; bi++) {
+                                DynamicJsonDocument lineDoc(512);
+                                // RAW flow in both passes: Supabase decides recoverable/non-recoverable.
+                                if (deserializeJson(lineDoc, batchLines[bi]) == DeserializationError::Ok) {
+                                    p_items.add(lineDoc.as<JsonObject>());
+                                } else {
+                                    state[batchIndices[bi]] = 2;
+                                    hadAny400ThisPass = true;
+                                    LOG_PRINTF("[SyncTask] Corrupt line %d in %s\n",
+                                               batchIndices[bi], chunkName.c_str());
                                 }
-                                
-                                String fileContent = valFile.readString();
-                                valFile.close();
-                                
-                                ValidationResult result = dataManager->validateSessionFile(fileContent);
-                                
-                                if (result == VALID) {
-                                    LOG_PRINTF("[SyncTask] [VALIDATION] File VALID: %s (will retry in CYCLE 2)\n", filePath.c_str());
-                                    hasValidOrRecoverable = true;
-                                } else if (result == RECOVERABLE) {
-                                    LOG_PRINTF("[SyncTask] [VALIDATION] File RECOVERABLE: %s (cleaning...)\n", filePath.c_str());
-                                    if (dataManager->cleanAndSaveSessionFile(filePath)) {
-                                        LOG_PRINTF("[SyncTask] [VALIDATION] File cleaned: %s (will retry in CYCLE 2)\n", filePath.c_str());
-                                        hasValidOrRecoverable = true;
+                            }
+                            if (p_items.size() > 0) {
+                                String batchJson;
+                                serializeJson(batchDoc, batchJson);
+                                LOG_PRINTF("[SyncTask] Uploading %d sessions...\n",
+                                           (int)p_items.size());
+                                UploadResult result = supabaseClient->recordTrainingBatch(
+                                    accessToken, batchJson);
+                                if (result == UPLOAD_SUCCESS) {
+                                    for (int bi = 0; bi < batchCount; bi++)
+                                        if (state[batchIndices[bi]] != 2)
+                                            state[batchIndices[bi]] = 1;
+                                } else if (result == UPLOAD_VALIDATION_ERROR) {
+                                    LOG_PRINTF("[SyncTask] 400 on batch from %s (pass %s)\n",
+                                               chunkName.c_str(), isRetryPass ? "RETRY" : "1");
+                                    hadAny400ThisPass = true;
+
+                                    if (!isRetryPass) {
+                                        for (int bi = 0; bi < batchCount; bi++) {
+                                            if (state[batchIndices[bi]] != 2) {
+                                                state[batchIndices[bi]] = 2;
+                                            }
+                                        }
                                     } else {
-                                        LOG_PRINTF("[SyncTask] [VALIDATION] Failed to clean: %s (deleting)\n", filePath.c_str());
-                                        dataManager->deleteSessionFile(filePath);
+                                        // Retry pass: salvage valid rows with per-item fallback.
+                                        for (int bi = 0; bi < batchCount && !syncFailed && !g_cancelSync; bi++) {
+                                            int idx = batchIndices[bi];
+                                            if (state[idx] == 2) {
+                                                continue;
+                                            }
+
+                                            DynamicJsonDocument oneItemDoc(1024);
+                                            JsonArray oneItemArray = oneItemDoc.createNestedArray("p_items");
+                                            DynamicJsonDocument lineDoc(512);
+                                            if (deserializeJson(lineDoc, batchLines[bi]) != DeserializationError::Ok) {
+                                                state[idx] = 2;
+                                                continue;
+                                            }
+                                            oneItemArray.add(lineDoc.as<JsonObject>());
+
+                                            String oneItemJson;
+                                            serializeJson(oneItemDoc, oneItemJson);
+                                            UploadResult oneResult = supabaseClient->recordTrainingBatch(accessToken, oneItemJson);
+                                            if (oneResult == UPLOAD_SUCCESS) {
+                                                state[idx] = 1;
+                                                LOG_PRINTF("[SyncTask] Retry salvage OK line %d in %s\n",
+                                                           idx, chunkName.c_str());
+                                            } else if (oneResult == UPLOAD_VALIDATION_ERROR) {
+                                                state[idx] = 2;
+                                                LOG_PRINTF("[SyncTask] Retry salvage FAILED line %d in %s\n",
+                                                           idx, chunkName.c_str());
+                                            } else {
+                                                LOG_PRINTF("[SyncTask] Retry salvage fatal error line %d in %s\n",
+                                                           idx, chunkName.c_str());
+                                                syncFailed = true;
+                                            }
+                                        }
                                     }
-                                } else if (result == UNRECOVERABLE) {
-                                    LOG_PRINTF("[SyncTask] [VALIDATION] File UNRECOVERABLE: %s (deleting)\n", filePath.c_str());
-                                    dataManager->deleteSessionFile(filePath);
+                                } else {
+                                    LOG_PRINTF("[SyncTask] Fatal error on %s -> aborting\n",
+                                               chunkName.c_str());
+                                    syncFailed = true;
                                 }
                             }
-                            
-                            LOG_PRINTLN("[SyncTask] [VALIDATION] Validation complete for this batch.");
-                            
-                            // Marcar para repetir si hay archivos válidos o limpios en este lote
-                            if (hasValidOrRecoverable) {
-                                shouldRepeat = true;
-                                LOG_PRINTLN("[SyncTask] [VALIDATION] Found valid/cleaned files - will retry in CYCLE 2");
-                            } else {
-                                LOG_PRINTLN("[SyncTask] [VALIDATION] All files in this batch were UNRECOVERABLE (deleted)");
-                            }
-                        
-                        // NO reintentar el lote ahora, continuar al siguiente lote
-                        } else if (uploadResult == UPLOAD_TIMEOUT) {
-                            LOG_PRINTLN("[SyncTask] [BATCH] FAILED (408 - Timeout)");
-                            syncFailed = true;
-                        } else if (uploadResult == UPLOAD_SERVER_ERROR || uploadResult == UPLOAD_UNAVAILABLE) {
-                            LOG_PRINTF("[SyncTask] [BATCH] FAILED (%d - Server Error)\n", uploadResult);
-                            syncFailed = true;
-                        } else {
-                            LOG_PRINTLN("[SyncTask] [BATCH] FAILED (Unknown Error)");
-                            syncFailed = true;
+                            batchCount = 0;
                         }
                     }
-                    
-                    // Fin del lote, continuar con el siguiente
-                }
-                
+
+                    // ---- Last partial batch ----
+                    if (batchCount > 0 && !syncFailed && !g_cancelSync) {
+                        DynamicJsonDocument batchDoc(4096);
+                        JsonArray p_items = batchDoc.createNestedArray("p_items");
+                        for (int bi = 0; bi < batchCount; bi++) {
+                            DynamicJsonDocument lineDoc(512);
+                            // RAW flow in both passes: Supabase decides recoverable/non-recoverable.
+                            if (deserializeJson(lineDoc, batchLines[bi]) == DeserializationError::Ok) {
+                                p_items.add(lineDoc.as<JsonObject>());
+                            } else {
+                                state[batchIndices[bi]] = 2;
+                                hadAny400ThisPass = true;
+                                LOG_PRINTF("[SyncTask] Corrupt line %d in %s\n",
+                                           batchIndices[bi], chunkName.c_str());
+                            }
+                        }
+                        if (p_items.size() > 0) {
+                            String batchJson;
+                            serializeJson(batchDoc, batchJson);
+                            LOG_PRINTF("[SyncTask] Uploading last %d sessions...\n",
+                                       (int)p_items.size());
+                            UploadResult result = supabaseClient->recordTrainingBatch(
+                                accessToken, batchJson);
+                            if (result == UPLOAD_SUCCESS) {
+                                for (int bi = 0; bi < batchCount; bi++)
+                                    if (state[batchIndices[bi]] != 2)
+                                        state[batchIndices[bi]] = 1;
+                            } else if (result == UPLOAD_VALIDATION_ERROR) {
+                                LOG_PRINTF("[SyncTask] 400 on last batch from %s (pass %s)\n",
+                                           chunkName.c_str(), isRetryPass ? "RETRY" : "1");
+                                hadAny400ThisPass = true;
+
+                                if (!isRetryPass) {
+                                    for (int bi = 0; bi < batchCount; bi++) {
+                                        if (state[batchIndices[bi]] != 2) {
+                                            state[batchIndices[bi]] = 2;
+                                        }
+                                    }
+                                } else {
+                                    // Retry pass: salvage valid rows with per-item fallback.
+                                    for (int bi = 0; bi < batchCount && !syncFailed && !g_cancelSync; bi++) {
+                                        int idx = batchIndices[bi];
+                                        if (state[idx] == 2) {
+                                            continue;
+                                        }
+
+                                        DynamicJsonDocument oneItemDoc(1024);
+                                        JsonArray oneItemArray = oneItemDoc.createNestedArray("p_items");
+                                        DynamicJsonDocument lineDoc(512);
+                                        if (deserializeJson(lineDoc, batchLines[bi]) != DeserializationError::Ok) {
+                                            state[idx] = 2;
+                                            continue;
+                                        }
+                                        oneItemArray.add(lineDoc.as<JsonObject>());
+
+                                        String oneItemJson;
+                                        serializeJson(oneItemDoc, oneItemJson);
+                                        UploadResult oneResult = supabaseClient->recordTrainingBatch(accessToken, oneItemJson);
+                                        if (oneResult == UPLOAD_SUCCESS) {
+                                            state[idx] = 1;
+                                            LOG_PRINTF("[SyncTask] Retry salvage OK line %d in %s\n",
+                                                       idx, chunkName.c_str());
+                                        } else if (oneResult == UPLOAD_VALIDATION_ERROR) {
+                                            state[idx] = 2;
+                                            LOG_PRINTF("[SyncTask] Retry salvage FAILED line %d in %s\n",
+                                                       idx, chunkName.c_str());
+                                        } else {
+                                            LOG_PRINTF("[SyncTask] Retry salvage fatal error line %d in %s\n",
+                                                       idx, chunkName.c_str());
+                                            syncFailed = true;
+                                        }
+                                    }
+                                }
+                            } else {
+                                LOG_PRINTF("[SyncTask] Fatal error on last batch of %s -> aborting\n",
+                                           chunkName.c_str());
+                                syncFailed = true;
+                            }
+                        }
+                        batchCount = 0;
+                    }
+
+                    chunkFile.close();
+
+                    // ---- Decide what to do with this chunk ----
+                    if (!syncFailed) {
+                        bool allOk = true;
+                        for (int i = 0; i < totalLines; i++) {
+                            if (state[i] != 1) { allOk = false; break; }
+                        }
+                        if (allOk) {
+                            LOG_PRINTF("[SyncTask] All lines OK -> deleting %s\n",
+                                       chunkName.c_str());
+                            dataManager->deleteSessionFile(chunkPath);
+                        } else if (isRetryPass) {
+                            // Still failing on retry -> corrupt data -> delete
+                            LOG_PRINTF("[SyncTask] Failed on retry (corrupt) -> deleting %s\n",
+                                       chunkName.c_str());
+                            dataManager->deleteSessionFile(chunkPath);
+                        } else {
+                            LOG_PRINTF("[SyncTask] Has failures -> will retry: %s\n",
+                                       chunkName.c_str());
+                        }
+                    }
+
+                    dirEntry = root.openNextFile();
+                } // end while (dirEntry)
+
                 root.close();
-                
-                // Si hay que repetir, cerrar el directorio y volver a abrirlo
-                if (shouldRepeat && !syncFailed && !g_cancelSync) {
-                    LOG_PRINTLN("[SyncTask] ========== RESTARTING FILE SYNC ==========");
-                    // El siguiente ciclo abrirá el directorio nuevamente
-                }
-            }
-            
-            LOG_PRINTLN("[SyncTask] Finished file sync. Releasing mutex.");
-            if (hasErrorIn400Retry) {
-                LOG_PRINTLN("[SyncTask] ERROR: 400 validation error during retry - aborting sync");
-            }
+
+                if (syncFailed || g_cancelSync) break;
+                // If no 400s this pass, or we already did the retry pass -> done
+                if (!hadAny400ThisPass || isRetryPass) break;
+                // Pass 1 had 400s -> start retry pass
+                isRetryPass = true;
+                LOG_PRINTLN("[SyncTask] 400 errors in pass 1 -> starting retry pass...");
+
+            } // end while (two-pass loop)
+
+            LOG_PRINTLN("[SyncTask] Finished chunk sync. Releasing mutex.");
             xSemaphoreGive(dataManager->getMutex());
         }
     }
-
     // 5. Sincronizar lista de perros
     if (!syncFailed && !g_cancelSync) {
         LOG_PRINTLN("[SyncTask] Fetching dog list...");
