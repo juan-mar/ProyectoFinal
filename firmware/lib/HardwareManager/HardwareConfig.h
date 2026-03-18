@@ -44,9 +44,18 @@
 #define PIN_LED_B 27
 #define LED_ACTIVE 0     // Nivel lógico para encender el LED (1=HIGH, 0=LOW)
 
-#define PWM_CHANNEL_LED 0
-#define PWM_FREQUENCY_LED 1000     // Hz
-#define PWM_BIT_WIDTH_LED 8         // 0-255
+#define LED_PWM_CHANNEL_R 0
+#define LED_PWM_CHANNEL_G 1
+#define LED_PWM_CHANNEL_B 2
+#define PWM_FREQUENCY_LED 1000      // Hz
+#define PWM_BIT_WIDTH_LED 8         // Resolución PWM
+
+#define LED_BRIGHTNESS_MIN 0
+#define LED_BRIGHTNESS_MAX 255
+#define LED_BRIGHTNESS_DEFAULT 128
+#define LED_COLOR_MIN 0
+#define LED_COLOR_MAX 255
+#define LED_PWM_MAX_DUTY ((1U << PWM_BIT_WIDTH_LED) - 1U)
 
 // --- Battery Monitor ---
 #define PIN_BATTERY 39              // ADC pin para lectura de voltaje de batería
@@ -121,13 +130,13 @@
  * Para compilación condicional en diferentes variantes
  */
 #define ENABLE_TAG_READER 1
-#define ENABLE_REMOTE_CONTROL 1
+#define ENABLE_REMOTE_CONTROL 0
 #define ENABLE_LED_CONTROL 1
 #define ENABLE_SOLENOID 1
 #define ENABLE_LAUNCHER 1
 #define ENABLE_BLE_SCANNER 1
-#define ENABLE_BATTERY_MONITOR 0
-#define ENABLE_ENVIRONMENT_SENSOR 1
+#define ENABLE_BATTERY_MONITOR 1
+#define ENABLE_ENVIRONMENT_SENSOR 0
 #define ENABLE_MODE_SWITCH 1
 
 #endif // HARDWARE_CONFIG_H

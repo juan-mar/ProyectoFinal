@@ -242,6 +242,17 @@ void HardwareManager::update_remote() {
 }
 
 void HardwareManager::update_tag() {
+    unsigned long now = millis();
+    if ((_bleScanner.state == CALIBRATION_RX || _bleScanner.state == DETECTION_RX) &&
+        (now - _lastTagRssiLog >= TAG_RSSI_LOG_PERIOD_MS)) {
+        char eventMsg[64];
+        snprintf(eventMsg, sizeof(eventMsg), "TAG RSSI [%s]: %d",
+                 _bleScanner.state == CALIBRATION_RX ? "CAL" : "TRAIN",
+                 _bleScanner.getRSSI());
+        EVENT_INFO(eventMsg);
+        _lastTagRssiLog = now;
+    }
+
     switch(_bleScanner.scan()){
         case CALIBRATING:
             //LOG_PRINTLN("[HW] BLE Scanner: CALIBRATING");
@@ -504,6 +515,7 @@ void HardwareManager::enableTag(bool calibrationMode) {
     #if ENABLE_TAG_READER
     if (!_peripheralState.tagEnabled) {
         _peripheralState.tagEnabled = true;
+        _lastTagRssiLog = 0;
         _bleScanner.state = calibrationMode ? CALIBRATION_RX : DETECTION_RX; // Configuramos el estado del driver según el modo   
         LOG_PRINTF("[HW] TAG powered ON (mode: %s)\n", 
                    calibrationMode ? "CALIBRATION" : "DETECTION");

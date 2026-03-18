@@ -24,10 +24,10 @@
  * When set to 0, all LOG_... macros are compiled out,
  * saving flash space and execution time.
  */
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 #define PIN_DEBUG_MODE 1
 #define TEST_LANZAMIENTOS 0
-#define TEST_LITTLEFS_CAPACITY 1
+#define TEST_LITTLEFS_CAPACITY 0
 
 /****************************************************************
  * Logger Macros (The smart part)
@@ -81,7 +81,7 @@
  ****************************************************************/
 
 #define EVENT_LOGGER_ENABLED 1
-#define EVENT_LOGGER_LCD_ENABLED 0
+#define EVENT_LOGGER_LCD_ENABLED 1
 #define EVENT_LOGGER_WEB_ENABLED 1
 #define EVENT_LOGGER_BUFFER_SIZE 180
 
