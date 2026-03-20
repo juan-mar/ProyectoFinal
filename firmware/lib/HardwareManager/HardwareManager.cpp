@@ -246,7 +246,7 @@ void HardwareManager::update_tag() {
     if ((_bleScanner.state == CALIBRATION_RX || _bleScanner.state == DETECTION_RX) &&
         (now - _lastTagRssiLog >= TAG_RSSI_LOG_PERIOD_MS)) {
         char eventMsg[64];
-        snprintf(eventMsg, sizeof(eventMsg), "TAG RSSI [%s]: %d",
+        snprintf(eventMsg, sizeof(eventMsg), "RSSI[%s]: %d",
                  _bleScanner.state == CALIBRATION_RX ? "CAL" : "TRAIN",
                  _bleScanner.getRSSI());
         EVENT_INFO(eventMsg);
