@@ -95,4 +95,23 @@
 // #define EVENT_LCD_COLS 16
 // #define EVENT_LCD_ROWS 2
 
+/****************************************************************
+ * RSSI Logger Configuration (THIRD OUTPUT: binary file in LittleFS)
+ *
+ * Enable/disable RSSI logging for calibration and training modes.
+ * When ENABLED=1:
+ *   - Captures RSSI signal strength values during calibration/training
+ *   - Saves to /rssi_log.bin in LittleFS (record = 8 bytes)
+ *   - UART dump command sends binary framed stream (magic: RSB1)
+ *   - Minimal overhead: ~1µs per log, 800B RAM for buffer (size=100)
+ *
+ * When ENABLED=0:
+ *   - All RSSI_LOG_*() macros compile to nothing
+ *   - Zero code footprint, saves flash space
+ *   - Useful for production release builds
+ ****************************************************************/
+#define RSSI_LOGGER_ENABLED 1
+#define RSSI_LOGGER_BUFFER_SIZE 100  // Entries per batch (100 * 8 bytes = 800B)
+                                      // Flushes to LittleFS automatically when buffer fills
+
 #endif // CONFIG_H

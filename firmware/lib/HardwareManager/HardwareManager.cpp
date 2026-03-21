@@ -1,6 +1,7 @@
 #include "HardwareManager.h"
 #include "Config.h"
 #include "EventLogger.h"
+#include "RssiLogger.h"       // RSSI signal strength logger (third output)
 #include <driver/uart.h>
 #include <hal/uart_types.h> 
 
@@ -245,11 +246,19 @@ void HardwareManager::update_tag() {
     unsigned long now = millis();
     if ((_bleScanner.state == CALIBRATION_RX || _bleScanner.state == DETECTION_RX) &&
         (now - _lastTagRssiLog >= TAG_RSSI_LOG_PERIOD_MS)) {
-        char eventMsg[64];
-        snprintf(eventMsg, sizeof(eventMsg), "RSSI[%s]: %d",
-                 _bleScanner.state == CALIBRATION_RX ? "CAL" : "TRAIN",
-                 _bleScanner.getRSSI());
-        EVENT_INFO(eventMsg);
+        
+        int currentRssi = _bleScanner.getRSSI();
+        
+        // Log via RssiLogger to CSV file (if enabled)
+        // This is the only RSSI logging output - to LittleFS for post-analysis
+        #if RSSI_LOGGER_ENABLED
+        if (_bleScanner.state == CALIBRATION_RX) {
+            RSSI_LOG_CAL(currentRssi);
+        } else {
+            RSSI_LOG_TRAIN(currentRssi);
+        }
+        #endif
+        
         _lastTagRssiLog = now;
     }
 

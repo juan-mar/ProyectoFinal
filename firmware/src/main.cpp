@@ -17,6 +17,7 @@
 #include "TrainingSession.h"
 #include "WebServerManager.h"
 #include "EventLogger.h"   // Event logging system
+#include "RssiLogger.h"    // RSSI signal strength logger (optional, compile-time)
 
 
 /****************************************************************
@@ -40,6 +41,7 @@ SupabaseClient* g_supabaseClient = nullptr;
 HardwareManager* g_hardwareManager = nullptr;
 WebServerManager* g_webServerManager = nullptr;
 EventLogger* g_eventLogger = nullptr;
+RssiLogger* g_rssiLogger = nullptr;  // RSSI logger (if RSSI_LOGGER_ENABLED)
 
 RTC_DATA_ATTR uint32_t g_bootMarker = 0;
 
@@ -143,6 +145,14 @@ void setup() {
     LOG_PRINTLN("EventLogger initialized.");
     EVENT_INFO("Main Boot OK");
 #endif
+    
+    // 5b. Initialize RssiLogger (optional third output for RSSI data)
+#if RSSI_LOGGER_ENABLED
+    g_rssiLogger = RssiLogger::getInstance();
+    g_rssiLogger->begin();
+    LOG_PRINTLN("RssiLogger initialized.");
+#endif
+    
     reportBootCause();
 
     // 6. Create WebServerManager
@@ -245,6 +255,14 @@ void setup() {
 
     LOG_PRINTLN("\n--- Write WIFI ---");
     LOG_PRINTLN(" 'W' -> Write WIFI in NVS");
+
+#if RSSI_LOGGER_ENABLED
+    LOG_PRINTLN("\n--- RSSI Logger Commands ---");
+    LOG_PRINTLN(" '&' -> rssi-dump (binary framed stream over UART)");
+    LOG_PRINTLN(" '%' -> rssi-clear (clear log file)");
+    LOG_PRINTLN(" '!' -> rssi-stats (print min/max/avg)");
+#endif
+
 #else
     EVENT_INFO("Main:TEST_LANZAMIENTOS ON");
 #endif
@@ -668,6 +686,27 @@ void loop() {
 #endif
                     sendEvent = false;
                     break;
+
+#if RSSI_LOGGER_ENABLED
+                case '&':
+                    // RSSI Logger: Dump log via UART
+                    g_rssiLogger->dumpLogViaSUART();
+                    sendEvent = false;
+                    break;
+
+                case '%':
+                    // RSSI Logger: Clear log file
+                    g_rssiLogger->clearLogFile();
+                    LOG_PRINTLN("[RSSI] Log file cleared");
+                    sendEvent = false;
+                    break;
+
+                case '!':
+                    // RSSI Logger: Print statistics
+                    g_rssiLogger->printStatistics();
+                    sendEvent = false;
+                    break;
+#endif
 
                 default:
                     sendEvent = false;
