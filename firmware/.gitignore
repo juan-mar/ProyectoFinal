@@ -5,3 +5,4 @@
 .vscode/
 include/Credentials.h
 mediciones.txt
+.venv_firmware_tools
