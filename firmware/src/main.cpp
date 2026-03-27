@@ -26,7 +26,7 @@
 #define STATE_MANAGER_TASK_STACK_SIZE 8192 // 8KB stack for the FSM (increased for stability)
 #define STATE_MANAGER_TASK_PRIORITY 1      // Low priority
 
-#define UI_TASK_STACK_SIZE 2048 
+#define UI_TASK_STACK_SIZE 4096 
 #define UI_TASK_PRIORITY 1
 
 #define EVENT_LOGGER_LCD_TASK_STACK_SIZE 2048
@@ -258,9 +258,11 @@ void setup() {
 
 #if RSSI_LOGGER_ENABLED
     LOG_PRINTLN("\n--- RSSI Logger Commands ---");
-    LOG_PRINTLN(" '&' -> rssi-dump (binary framed stream over UART)");
-    LOG_PRINTLN(" '%' -> rssi-clear (clear log file)");
-    LOG_PRINTLN(" '!' -> rssi-stats (print min/max/avg)");
+#if RSSI_LOGGER_DUMP_ENABLED == 1
+    LOG_PRINTLN(" '&' -> rssi-dump (binary framed RAM buffer over UART)");
+#endif
+    LOG_PRINTLN(" '%' -> rssi-clear (clear RAM buffer)");
+    LOG_PRINTLN(" '!' -> rssi-stats (print min/max/avg from RAM buffer)");
 #endif
 
 #else
@@ -688,11 +690,13 @@ void loop() {
                     break;
 
 #if RSSI_LOGGER_ENABLED
+#if RSSI_LOGGER_DUMP_ENABLED == 1
                 case '&':
                     // RSSI Logger: Dump log via UART
                     g_rssiLogger->dumpLogViaSUART();
                     sendEvent = false;
                     break;
+#endif
 
                 case '%':
                     // RSSI Logger: Clear log file

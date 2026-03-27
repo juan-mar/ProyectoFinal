@@ -6,3 +6,5 @@
 include/Credentials.h
 mediciones.txt
 .venv_firmware_tools
+scripts/rssi_csv/
+scripts/__pycache__/

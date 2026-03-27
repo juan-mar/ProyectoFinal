@@ -24,7 +24,7 @@
  * When set to 0, all LOG_... macros are compiled out,
  * saving flash space and execution time.
  */
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 #define PIN_DEBUG_MODE 1
 #define TEST_LANZAMIENTOS 0
 #define TEST_LITTLEFS_CAPACITY 0
@@ -95,8 +95,34 @@
 // #define EVENT_LCD_COLS 16
 // #define EVENT_LCD_ROWS 2
 
-#define RSSI_LOGGER_ENABLED 0
+#define RSSI_LOGGER_ENABLED 1
 #define RSSI_LOGGER_BUFFER_SIZE 100  // Entries per batch (100 * 8 bytes = 800B)
                                       // Flushes to LittleFS automatically when buffer fills
+// Queue size for high-rate DAT messages enqueued from BLE callback context.
+#define RSSI_LOGGER_UART_DAT_QUEUE_SIZE 128
+// Max DAT rows sent per poll cycle from task context.
+#define RSSI_LOGGER_UART_DAT_BURST 8
+// Legacy live sample format: "millis,mode,rssi" (disable to avoid callback UART writes).
+#define RSSI_LOGGER_LEGACY_LIVE_SAMPLE_ENABLED 0
+// Enable/disable binary RAM dump command ('&') over UART.
+// Keep this at 0 to avoid confusion while using DAT/EVT/CFG live stream.
+#define RSSI_LOGGER_DUMP_ENABLED 0
+
+// Compile-time transport for live RSSI sample output
+#define RSSI_LOGGER_TRANSPORT_NONE 0
+#define RSSI_LOGGER_TRANSPORT_UART 1
+#define RSSI_LOGGER_TRANSPORT_I2C 2
+
+// Choose one: NONE / UART / I2C
+#define RSSI_LOGGER_TRANSPORT RSSI_LOGGER_TRANSPORT_UART
+
+// UART transport settings (used when RSSI_LOGGER_TRANSPORT_UART)
+#define RSSI_LOGGER_UART_BAUD 115200
+
+// I2C transport settings (used when RSSI_LOGGER_TRANSPORT_I2C)
+#define RSSI_LOGGER_I2C_ADDR 0x42
+#define RSSI_LOGGER_I2C_SDA 21
+#define RSSI_LOGGER_I2C_SCL 22
+#define RSSI_LOGGER_I2C_FREQ_HZ 400000
 
 #endif // CONFIG_H

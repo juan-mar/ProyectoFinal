@@ -94,7 +94,6 @@ public:
     static const uint32_t LOOP_PERIOD_MS = 20;
     static const uint32_t BATTERY_READ_PERIOD_MS = 5000;      // Leer batería cada ~5 segundos
     static const uint32_t ENVIRONMENT_READ_PERIOD_MS = 60000;  // Leer sensor ambiental cada ~60 segundos
-    static const uint32_t TAG_RSSI_LOG_PERIOD_MS = 500;       // Log de RSSI TAG cada 500 ms
 
     /**
      * @brief Obtiene el porcentaje actual de batería.
@@ -174,7 +173,6 @@ private:
     // --- Timing ---
     unsigned long _lastBatteryReading;      // Último tiempo de lectura de batería
     unsigned long _lastEnvironmentReading;  // Último tiempo de lectura de sensor ambiental
-    unsigned long _lastTagRssiLog = 0;      // Último tiempo de log de RSSI del TAG
 
     // Métodos Privados de ayuda
     void processCommand(HwMessage msg);

@@ -1,6 +1,7 @@
 #include "rx.h"
 #include "Filtro.h"
 #include "Config.h"
+#include "RssiLogger.h"
 
 
 /****************************************** DEFINICIONES *********************************************/
@@ -105,6 +106,16 @@ void Receptor::init() {
 void Receptor::_procesarDato(int rssi) {
     rssiActual = rssi; 
     rssi_filtered = filtro_kalman.filtrado(rssiActual);
+
+#if RSSI_LOGGER_ENABLED
+  if (state == CALIBRATION_RX) {
+    //RSSI_LOG_CAL(rssiActual);
+    RSSI_UART_DAT("CAL", rssiActual, rssi_filtered);
+  } else if (state == DETECTION_RX) {
+    //RSSI_LOG_TRAIN(rssiActual);
+    RSSI_UART_DAT("TRAIN", rssiActual, rssi_filtered);
+  }
+#endif
 }
 
 bool Receptor::calibracion() {
@@ -198,6 +209,38 @@ bool Receptor::detect_thres() {
 
 int Receptor::getRSSI() {
     return rssiActual;
+}
+
+float Receptor::getFilteredRSSI() {
+  return rssi_filtered;
+}
+
+float Receptor::getThreshold() const {
+  return threshold;
+}
+
+float Receptor::getVarianza() const {
+  return varianza;
+}
+
+float Receptor::getBarrier() const {
+  return (float)barrier;
+}
+
+float Receptor::getKalmanQ() const {
+  return filtro_kalman.getVarianzaQ();
+}
+
+float Receptor::getKalmanR() const {
+  return filtro_kalman.getVarianzaR();
+}
+
+float Receptor::getKalmanX0() const {
+  return filtro_kalman.getX0();
+}
+
+float Receptor::getKalmanP0() const {
+  return filtro_kalman.getP0();
 }
 
 

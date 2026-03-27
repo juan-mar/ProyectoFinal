@@ -243,24 +243,9 @@ void HardwareManager::update_remote() {
 }
 
 void HardwareManager::update_tag() {
-    unsigned long now = millis();
-    if ((_bleScanner.state == CALIBRATION_RX || _bleScanner.state == DETECTION_RX) &&
-        (now - _lastTagRssiLog >= TAG_RSSI_LOG_PERIOD_MS)) {
-        
-        int currentRssi = _bleScanner.getRSSI();
-        
-        // Log via RssiLogger to CSV file (if enabled)
-        // This is the only RSSI logging output - to LittleFS for post-analysis
-        #if RSSI_LOGGER_ENABLED
-        if (_bleScanner.state == CALIBRATION_RX) {
-            RSSI_LOG_CAL(currentRssi);
-        } else {
-            RSSI_LOG_TRAIN(currentRssi);
-        }
-        #endif
-        
-        _lastTagRssiLog = now;
-    }
+    #if RSSI_LOGGER_ENABLED
+    RSSI_UART_POLL_DAT(RSSI_LOGGER_UART_DAT_BURST);
+    #endif
 
     switch(_bleScanner.scan()){
         case CALIBRATING:
@@ -270,6 +255,19 @@ void HardwareManager::update_tag() {
         {
             LOG_PRINTLN("[HW] BLE Scanner: CALIBRATION OK");
             EVENT_INFO("HW:BLE Calib OK");
+            #if RSSI_LOGGER_ENABLED
+            RSSI_UART_CFG(
+                _bleScanner.getKalmanQ(),
+                _bleScanner.getKalmanR(),
+                _bleScanner.getKalmanX0(),
+                _bleScanner.getKalmanP0(),
+                _bleScanner.getThreshold(),
+                _bleScanner.getVarianza(),
+                _bleScanner.getThreshold(),
+                _bleScanner.getBarrier(),
+                "OUT"
+            );
+            #endif
             //SEND EVENT TO FSM IF NEEDED
             Event ev;
             ev.type = EVENT_CALIBRATION_COMPLETE;
@@ -280,6 +278,9 @@ void HardwareManager::update_tag() {
         {
             LOG_PRINTLN("[HW] BLE Scanner: LOST!");
             EVENT_WARN("HW:BLE Dog Lost");
+            #if RSSI_LOGGER_ENABLED
+            RSSI_UART_EVT("OUT");
+            #endif
             Event ev;
             ev.type = EVENT_DOG_LOST;
             xQueueSend(_fsmQueue, &ev, 0);
@@ -289,6 +290,9 @@ void HardwareManager::update_tag() {
         {
             LOG_PRINTLN("[HW] BLE Scanner: DETECTED!");
             EVENT_INFO("HW:BLE Dog Detect");
+            #if RSSI_LOGGER_ENABLED
+            RSSI_UART_EVT("IN");
+            #endif
             Event ev;
             ev.type = EVENT_DOG_DETECTED;
             xQueueSend(_fsmQueue, &ev, 0);
@@ -524,7 +528,6 @@ void HardwareManager::enableTag(bool calibrationMode) {
     #if ENABLE_TAG_READER
     if (!_peripheralState.tagEnabled) {
         _peripheralState.tagEnabled = true;
-        _lastTagRssiLog = 0;
         _bleScanner.state = calibrationMode ? CALIBRATION_RX : DETECTION_RX; // Configuramos el estado del driver según el modo   
         LOG_PRINTF("[HW] TAG powered ON (mode: %s)\n", 
                    calibrationMode ? "CALIBRATION" : "DETECTION");

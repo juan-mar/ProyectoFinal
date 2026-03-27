@@ -8,6 +8,8 @@ class Filtro {
   private:
     float x_est;
     float P_est;
+    float x0_init;
+    float p0_init;
     float varianzaR;
     float varianzaQ;
 
@@ -24,6 +26,13 @@ class Filtro {
     void set_varianzaQ(float var);
     
     float filtrado(float nuevaMuestra);
+
+    float getVarianzaR() const;
+    float getVarianzaQ() const;
+    float getX0() const;
+    float getP0() const;
+    float getXest() const;
+    float getPest() const;
 };
 
 

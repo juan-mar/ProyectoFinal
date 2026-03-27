@@ -128,8 +128,13 @@ float BatteryMonitor::getVoltage() {
     float currentVoltage = (analogReadMilliVolts(_pin) / 1000.0f) * _multiplier;
 
     // Keep a lightweight guard for disconnected input diagnostics.
+    static unsigned long s_lastZeroWarnMs = 0;
     if (rawValue == 0) {
-        LOG_PRINTLN("BatteryMonitor: Warning - ADC reading is 0.");
+        unsigned long now = millis();
+        if ((now - s_lastZeroWarnMs) >= 10000UL) {
+            LOG_PRINTLN("BatteryMonitor: Warning - ADC reading is 0.");
+            s_lastZeroWarnMs = now;
+        }
     }
     
     // Apply EMA filter: filtered_n = alpha * current + (1 - alpha) * filtered_(n-1)

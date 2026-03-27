@@ -67,6 +67,14 @@ class Receptor {
         void _procesarDato(int rssi);
 
         int getRSSI();
+        float getFilteredRSSI();
+        float getThreshold() const;
+        float getVarianza() const;
+        float getBarrier() const;
+        float getKalmanQ() const;
+        float getKalmanR() const;
+        float getKalmanX0() const;
+        float getKalmanP0() const;
 
         void setNewMsg(bool val);
         bool isNewMsg();
