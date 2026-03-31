@@ -26,7 +26,7 @@ class Receptor {
 
         float threshold;
         float varianza;
-        int barrier;
+        float barrier;
         bool new_msg;
 
         // Guarda el ultimo valor de RSSI

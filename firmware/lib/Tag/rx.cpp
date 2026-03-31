@@ -182,7 +182,7 @@ bool Receptor::calibracion() {
 }
 
 bool Receptor::detect_thres() {
-  int rssi_curr = rssi_filtered;
+  float rssi_curr = rssi_filtered;
 
   // señal dentro del umbral
   if (rssi_curr > this->threshold) { 
