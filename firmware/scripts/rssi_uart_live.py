@@ -37,6 +37,7 @@ from matplotlib.animation import FuncAnimation
 import serial
 
 from kalman_scalar import ScalarKalmanFilter
+from ukf_distance import ScalarUnscentedKalmanFilter, distance_to_rssi_log
 
 LINE_3_RE = re.compile(r"^\s*(\d+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*$")
 LINE_2_RE = re.compile(r"^\s*(\d+)\s*,\s*(-?\d+)\s*$")
@@ -51,6 +52,7 @@ class DataSample:
     cmp_t1: Optional[float]
     py_t1: float
     py_dist_m: Optional[float]
+    py_dist_ukf_m: Optional[float]
     pc_ts: str
 
 
@@ -132,6 +134,18 @@ def normalize_state(value: str) -> str:
     return "UNK"
 
 
+def estimate_distance_m(
+    rssi_value: float,
+    ref_rssi_at_calib: Optional[float],
+    calibration_distance_m: float,
+    path_loss_exp: float,
+) -> Optional[float]:
+    if ref_rssi_at_calib is None or calibration_distance_m <= 0.0 or path_loss_exp <= 0.0:
+        return None
+    exponent = (ref_rssi_at_calib - rssi_value) / (10.0 * path_loss_exp)
+    return calibration_distance_m * (10.0 ** exponent)
+
+
 def split_fields(line: str) -> list[str]:
     return [p.strip() for p in line.split(",")]
 
@@ -151,6 +165,7 @@ class SharedState:
         self.hysteresis_in = 0.0
         self.hysteresis_out = 0.0
         self.calib_rssi_ref: Optional[float] = None
+        self.state_changes: list[tuple[int, str, str]] = []  # (evt_millis, old_state, new_state)
 
 
 class DataCsvWriter:
@@ -169,6 +184,7 @@ class DataCsvWriter:
                     "cmp_t1",
                     "py_t1",
                     "py_dist_m",
+                    "py_dist_ukf_m",
                 ]
             )
             self._file.flush()
@@ -183,6 +199,30 @@ class DataCsvWriter:
                 "" if sample.cmp_t1 is None else f"{sample.cmp_t1:.6f}",
                 f"{sample.py_t1:.6f}",
                 "" if sample.py_dist_m is None else f"{sample.py_dist_m:.6f}",
+                "" if sample.py_dist_ukf_m is None else f"{sample.py_dist_ukf_m:.6f}",
+            ]
+        )
+        self._file.flush()
+
+    def close(self) -> None:
+        self._file.close()
+
+
+class RawUartCsvWriter:
+    def __init__(self, csv_path: Path, overwrite: bool = False) -> None:
+        mode = "w" if overwrite else "a"
+        self._file = csv_path.open(mode, newline="", encoding="utf-8")
+        self._writer = csv.writer(self._file)
+        if overwrite or csv_path.stat().st_size == 0:
+            self._writer.writerow(["pc_time_iso", "pc_millis", "uart_line_raw"])
+            self._file.flush()
+
+    def write_raw(self, line: str, pc_millis: int) -> None:
+        self._writer.writerow(
+            [
+                dt.datetime.now().isoformat(timespec="milliseconds"),
+                str(pc_millis),
+                line,
             ]
         )
         self._file.flush()
@@ -364,24 +404,13 @@ def try_parse_cfg_kalman(cfg: ParsedCfgLine) -> Optional[tuple[float, float, flo
     return q, r, x0, p0
 
 
-def estimate_distance_m(
-    rssi_value: float,
-    ref_rssi_at_calib: Optional[float],
-    calibration_distance_m: float,
-    path_loss_exp: float,
-) -> Optional[float]:
-    if ref_rssi_at_calib is None or calibration_distance_m <= 0.0 or path_loss_exp <= 0.0:
-        return None
-    exponent = (ref_rssi_at_calib - rssi_value) / (10.0 * path_loss_exp)
-    return calibration_distance_m * (10.0 ** exponent)
-
-
 def reader_thread(
     ser: serial.Serial,
     state: SharedState,
     mode_writers: Dict[str, DataCsvWriter],
     mode_filters: Dict[str, BaseFilter],
-    unknown_writer: DataCsvWriter,
+    unknown_writer: Optional[DataCsvWriter],
+    raw_uart_writer: Optional[RawUartCsvWriter],
     unknown_filter: BaseFilter,
     cfg_writer: ConfigCsvWriter,
     evt_writer: EventCsvWriter,
@@ -390,7 +419,28 @@ def reader_thread(
     kalman_source: str,
     calibration_distance_m: float,
     path_loss_exp: float,
+    distance_ukf_enabled: bool,
+    distance_ukf_q: float,
+    distance_ukf_r: float,
+    distance_ukf_alpha: float,
+    distance_ukf_beta: float,
+    distance_ukf_kappa: float,
+    distance_ukf_init_m: float,
+    distance_ukf_init_p: float,
+    print_uart_raw: bool,
+    print_uart_rssi: bool,
 ) -> None:
+    distance_ukf: Optional[ScalarUnscentedKalmanFilter] = None
+
+    if distance_ukf_enabled:
+        distance_ukf = ScalarUnscentedKalmanFilter(
+            alpha=distance_ukf_alpha,
+            beta=distance_ukf_beta,
+            kappa=distance_ukf_kappa,
+            x0=distance_ukf_init_m,
+            p0=distance_ukf_init_p,
+        )
+
     while not stop_evt.is_set():
         try:
             raw = ser.readline()
@@ -401,7 +451,13 @@ def reader_thread(
             if not line:
                 continue
 
+            if print_uart_raw:
+                print(f"[UART] {line}")
+
             now_ms = int(time.time() * 1000)
+
+            if raw_uart_writer is not None:
+                raw_uart_writer.write_raw(line=line, pc_millis=now_ms)
 
             cfg = parse_cfg_line(line, fallback_millis=now_ms)
             if cfg is not None:
@@ -464,6 +520,11 @@ def reader_thread(
                 )
                 with state.lock:
                     state.total_evt_lines += 1
+                    old_state = state.last_state
+                    if evt.state != old_state:
+                        state.state_changes.append((evt.millis, old_state, evt.state))
+                        if len(state.state_changes) > 512:
+                            state.state_changes = state.state_changes[-512:]
                     state.last_state = evt.state
                 continue
 
@@ -485,6 +546,22 @@ def reader_thread(
                     calibration_distance_m=calibration_distance_m,
                     path_loss_exp=path_loss_exp,
                 )
+                py_dist_ukf_m: Optional[float] = None
+                if distance_ukf is not None and calib_rssi_ref is not None:
+                    # UKF state is distance (m); measurement is RSSI (dBm) from py_t1.
+                    step = distance_ukf.step(
+                        z=py_t1,
+                        f=lambda x: x,
+                        h=lambda x: distance_to_rssi_log(
+                            distance_m=x,
+                            ref_rssi_at_calib=calib_rssi_ref,
+                            calibration_distance_m=calibration_distance_m,
+                            path_loss_exp=path_loss_exp,
+                        ),
+                        q=distance_ukf_q,
+                        r=distance_ukf_r,
+                    )
+                    py_dist_ukf_m = step.x_post
                 sample = DataSample(
                     millis=parsed.millis,
                     tipo="UNK",
@@ -492,15 +569,27 @@ def reader_thread(
                     cmp_t1=parsed.cmp_t1,
                     py_t1=py_t1,
                     py_dist_m=py_dist_m,
+                    py_dist_ukf_m=py_dist_ukf_m,
                     pc_ts=dt.datetime.now().isoformat(timespec="milliseconds"),
                 )
-                unknown_writer.write(sample)
+                if unknown_writer is not None:
+                    unknown_writer.write(sample)
                 with state.lock:
                     state.samples.append(sample)
                     state.total_samples += 1
                     state.total_unknown_mode_lines += 1
                 if verbose_bad_lines:
                     print(f"[WARN] Unknown tipo saved to unknown CSV: {line}")
+                if print_uart_rssi:
+                    print(
+                        "[DAT] "
+                        f"ms={sample.millis} tipo={sample.tipo} "
+                        f"rssi={sample.rssi_t1:.2f} cmp_fw="
+                        f"{(sample.cmp_t1 if sample.cmp_t1 is not None else float('nan')):.2f} "
+                        f"py={sample.py_t1:.2f} dist_py="
+                        f"{(sample.py_dist_m if sample.py_dist_m is not None else float('nan')):.2f} "
+                        f"dist_ukf={((sample.py_dist_ukf_m if sample.py_dist_ukf_m is not None else float('nan'))):.2f}"
+                    )
                 continue
 
             py_t1 = mode_filters[parsed.tipo].process(parsed.rssi_t1).value
@@ -512,6 +601,22 @@ def reader_thread(
                 calibration_distance_m=calibration_distance_m,
                 path_loss_exp=path_loss_exp,
             )
+            py_dist_ukf_m: Optional[float] = None
+            if distance_ukf is not None and calib_rssi_ref is not None:
+                # UKF state is distance (m); measurement is RSSI (dBm) from py_t1.
+                step = distance_ukf.step(
+                    z=py_t1,
+                    f=lambda x: x,
+                    h=lambda x: distance_to_rssi_log(
+                        distance_m=x,
+                        ref_rssi_at_calib=calib_rssi_ref,
+                        calibration_distance_m=calibration_distance_m,
+                        path_loss_exp=path_loss_exp,
+                    ),
+                    q=distance_ukf_q,
+                    r=distance_ukf_r,
+                )
+                py_dist_ukf_m = step.x_post
 
             sample = DataSample(
                 millis=parsed.millis,
@@ -520,10 +625,22 @@ def reader_thread(
                 cmp_t1=parsed.cmp_t1,
                 py_t1=py_t1,
                 py_dist_m=py_dist_m,
+                py_dist_ukf_m=py_dist_ukf_m,
                 pc_ts=dt.datetime.now().isoformat(timespec="milliseconds"),
             )
 
             mode_writers[parsed.tipo].write(sample)
+
+            if print_uart_rssi:
+                print(
+                    "[DAT] "
+                    f"ms={sample.millis} tipo={sample.tipo} "
+                    f"rssi={sample.rssi_t1:.2f} cmp_fw="
+                    f"{(sample.cmp_t1 if sample.cmp_t1 is not None else float('nan')):.2f} "
+                    f"py={sample.py_t1:.2f} dist_py="
+                    f"{(sample.py_dist_m if sample.py_dist_m is not None else float('nan')):.2f} "
+                    f"dist_ukf={((sample.py_dist_ukf_m if sample.py_dist_ukf_m is not None else float('nan'))):.2f}"
+                )
 
             with state.lock:
                 state.samples.append(sample)
@@ -554,6 +671,12 @@ def main() -> int:
     )
     parser.add_argument("--window", type=int, default=100, help="Points to show in live plot")
     parser.add_argument("--refresh-ms", type=int, default=100, help="Plot refresh period in ms")
+    parser.add_argument(
+        "--view",
+        choices=["rssi", "rssi-distance"],
+        default="rssi-distance",
+        help="Live visualization mode: only RSSI or RSSI+distance",
+    )
     parser.add_argument("--start-cmd", default="", help="Optional command sent at start (example: '&')")
     parser.add_argument("--filter", choices=["none", "kalman", "ukf"], default="none", help="Fallback filter when DAT line has no cmp_t1")
     parser.add_argument(
@@ -579,9 +702,47 @@ def main() -> int:
         help="Path-loss exponent n for RSSI->distance conversion",
     )
     parser.add_argument(
+        "--distance-ukf",
+        choices=["off", "on"],
+        default="off",
+        help="Enable UKF only on distance curve (state=distance, measurement=RSSI)",
+    )
+    parser.add_argument("--distance-ukf-q", type=float, default=0.05, help="UKF process noise Q on distance state")
+    parser.add_argument("--distance-ukf-r", type=float, default=9.0, help="UKF measurement noise R on RSSI")
+    parser.add_argument("--distance-ukf-alpha", type=float, default=0.1, help="UKF alpha (sigma-point spread)")
+    parser.add_argument("--distance-ukf-beta", type=float, default=2.0, help="UKF beta (distribution prior)")
+    parser.add_argument("--distance-ukf-kappa", type=float, default=0.0, help="UKF kappa (secondary scaling)")
+    parser.add_argument(
+        "--distance-ukf-init-m",
+        type=float,
+        default=1.0,
+        help="UKF initial distance state in meters",
+    )
+    parser.add_argument(
+        "--distance-ukf-init-p",
+        type=float,
+        default=1.0,
+        help="UKF initial covariance for distance state",
+    )
+    parser.add_argument(
         "--verbose-bad-lines",
         action="store_true",
         help="Print lines that do not match expected format",
+    )
+    parser.add_argument(
+        "--print-uart-raw",
+        action="store_true",
+        help="Print every raw UART line received",
+    )
+    parser.add_argument(
+        "--print-uart-rssi",
+        action="store_true",
+        help="Print parsed DAT samples with RSSI/filter/distance values",
+    )
+    parser.add_argument(
+        "--unknown-capture-raw",
+        action="store_true",
+        help="Store all raw UART lines into unknown_mode_latest.csv (overwrites each run)",
     )
     args = parser.parse_args()
 
@@ -607,6 +768,14 @@ def main() -> int:
         "[INFO] Distance model "
         f"(d_cal={args.calibration_distance_m} m, n={args.path_loss_exp})"
     )
+    print(f"[INFO] Distance UKF: {args.distance_ukf}")
+    if args.distance_ukf == "on":
+        print(
+            "[INFO] Distance UKF params "
+            f"(Q={args.distance_ukf_q}, R={args.distance_ukf_r}, "
+            f"alpha={args.distance_ukf_alpha}, beta={args.distance_ukf_beta}, "
+            f"kappa={args.distance_ukf_kappa}, x0={args.distance_ukf_init_m}, p0={args.distance_ukf_init_p})"
+        )
 
     time.sleep(1.0)
     ser.reset_input_buffer()
@@ -634,7 +803,12 @@ def main() -> int:
         "CAL": DataCsvWriter(calib_csv),
         "TRAIN": DataCsvWriter(train_csv),
     }
-    unknown_writer = DataCsvWriter(unknown_csv, overwrite=True)
+    unknown_writer: Optional[DataCsvWriter] = None
+    raw_uart_writer: Optional[RawUartCsvWriter] = None
+    if args.unknown_capture_raw:
+        raw_uart_writer = RawUartCsvWriter(unknown_csv, overwrite=True)
+    else:
+        unknown_writer = DataCsvWriter(unknown_csv, overwrite=True)
     cfg_writer = ConfigCsvWriter(cfg_csv)
     evt_writer = EventCsvWriter(evt_csv)
     print(f"[INFO] Run directory: {run_dir}")
@@ -642,7 +816,10 @@ def main() -> int:
     print(f"[INFO] TRAIN CSV: {train_csv}")
     print(f"[INFO] CFG CSV: {cfg_csv}")
     print(f"[INFO] EVT CSV: {evt_csv}")
-    print(f"[INFO] UNKNOWN CSV (overwritten each run): {unknown_csv}")
+    if args.unknown_capture_raw:
+        print(f"[INFO] UNKNOWN CSV RAW CAPTURE (overwritten each run): {unknown_csv}")
+    else:
+        print(f"[INFO] UNKNOWN CSV (overwritten each run): {unknown_csv}")
 
     state = SharedState(window=args.window)
     stop_evt = threading.Event()
@@ -655,6 +832,7 @@ def main() -> int:
             mode_writers,
             mode_filters,
             unknown_writer,
+            raw_uart_writer,
             unknown_filter,
             cfg_writer,
             evt_writer,
@@ -663,26 +841,70 @@ def main() -> int:
             args.kalman_source,
             args.calibration_distance_m,
             args.path_loss_exp,
+            args.distance_ukf == "on",
+            args.distance_ukf_q,
+            args.distance_ukf_r,
+            args.distance_ukf_alpha,
+            args.distance_ukf_beta,
+            args.distance_ukf_kappa,
+            args.distance_ukf_init_m,
+            args.distance_ukf_init_p,
+            args.print_uart_raw,
+            args.print_uart_rssi,
         ),
         daemon=True,
     )
     thread.start()
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    raw_line, = ax.plot([], [], lw=1.2, label="RSSI crudo", color="#1f77b4")
-    cmp_line, = ax.plot([], [], lw=2.0, label="CMP t1 (firmware)", color="#d62728")
-    py_line, = ax.plot([], [], lw=1.8, label="Filtro Python", color="#2ca02c")
-    h_in_line = ax.axhline(y=0.0, color="#9467bd", linestyle="--", linewidth=1.2, label="Histeresis IN")
-    h_out_line = ax.axhline(y=0.0, color="#8c564b", linestyle=":", linewidth=1.2, label="Histeresis OUT")
-    ax.set_title("UART Live (raw vs cmp firmware vs python)")
-    ax.set_xlabel("Sample index (window)")
-    ax.set_ylabel("RSSI (dBm)")
-    ax.grid(True, alpha=0.35)
-    ax.legend(loc="lower right")
+    show_distance = args.view == "rssi-distance"
 
-    status_text = ax.text(0.01, 0.99, "", transform=ax.transAxes, va="top", ha="left")
+    if show_distance:
+        fig, (ax_rssi, ax_dist) = plt.subplots(2, 1, figsize=(10, 9))
+    else:
+        fig, ax_rssi = plt.subplots(1, 1, figsize=(10, 5.5))
+        ax_dist = None
+    
+    # RSSI subplot
+    raw_line, = ax_rssi.plot([], [], lw=1.2, label="RSSI crudo", color="#1f77b4")
+    cmp_line, = ax_rssi.plot([], [], lw=2.0, label="CMP t1 (firmware)", color="#d62728")
+    py_line, = ax_rssi.plot([], [], lw=1.8, label="Filtro Python", color="#2ca02c")
+    h_in_line = ax_rssi.axhline(y=0.0, color="#9467bd", linestyle="--", linewidth=1.2, label="Histeresis IN")
+    h_out_line = ax_rssi.axhline(y=0.0, color="#8c564b", linestyle=":", linewidth=1.2, label="Histeresis OUT")
+    ax_rssi.set_title("UART Live - RSSI (raw vs cmp firmware vs python)")
+    ax_rssi.set_xlabel("Tiempo (s) relativo a ventana, millis firmware")
+    ax_rssi.set_ylabel("RSSI (dBm)")
+    ax_rssi.grid(True, alpha=0.35)
+    ax_rssi.legend(loc="lower right")
+    
+    # Distance subplot (optional)
+    dist_raw_line = None
+    dist_esp_line = None
+    dist_py_line = None
+    dist_py_ukf_line = None
+    dist_h_in_line = None
+    dist_h_out_line = None
+    if show_distance and ax_dist is not None:
+        dist_raw_line, = ax_dist.plot([], [], lw=1.2, label="Distancia desde crudo", color="#1f77b4")
+        dist_esp_line, = ax_dist.plot([], [], lw=1.6, label="Distancia desde ESP", color="#d62728")
+        dist_py_line, = ax_dist.plot([], [], lw=1.8, label="Distancia desde Python", color="#2ca02c")
+        dist_py_ukf_line, = ax_dist.plot([], [], lw=2.0, label="Distancia UKF (desde RSSI Python)", color="#ff7f0e")
+        dist_h_in_line = ax_dist.axhline(y=0.0, color="#9467bd", linestyle="--", linewidth=1.2, alpha=0.7, label="Histeresis IN (dist)")
+        dist_h_out_line = ax_dist.axhline(y=0.0, color="#8c564b", linestyle=":", linewidth=1.2, alpha=0.7, label="Histeresis OUT (dist)")
+        ax_dist.set_title("UART Live - Distancia estimada")
+        ax_dist.set_xlabel("Tiempo (s) relativo a ventana, millis firmware")
+        ax_dist.set_ylabel("Distancia (m)")
+        ax_dist.grid(True, alpha=0.35)
+        ax_dist.legend(loc="lower right")
+
+    status_text = ax_rssi.text(0.01, 0.99, "", transform=ax_rssi.transAxes, va="top", ha="left")
+    
+    # Store references to vlines for state changes (to avoid duplicate display)
+    vlines_rssi = []
+    vlines_dist = []
 
     def update(_frame_idx: int):
+        nonlocal vlines_rssi, vlines_dist
+        
         with state.lock:
             data = list(state.samples)
             total = state.total_samples
@@ -696,14 +918,16 @@ def main() -> int:
             h_in = state.hysteresis_in
             h_out = state.hysteresis_out
             calib_rssi_ref = state.calib_rssi_ref
+            state_change_list = list(state.state_changes)
 
         if not data:
-            return raw_line, cmp_line, py_line, h_in_line, h_out_line, status_text
+            return ()
 
         y_raw = [s.rssi_t1 for s in data]
         y_cmp = [float("nan") if s.cmp_t1 is None else s.cmp_t1 for s in data]
         y_py = [s.py_t1 for s in data]
-        x = list(range(len(y_raw)))
+        base_ms = data[0].millis
+        x = [(s.millis - base_ms) / 1000.0 for s in data]
 
         raw_line.set_data(x, y_raw)
         cmp_line.set_data(x, y_cmp)
@@ -724,22 +948,106 @@ def main() -> int:
             y_min -= 1
             y_max += 1
 
-        ax.set_xlim(0, max(1, len(y_raw) - 1))
-        ax.set_ylim(y_min, y_max)
+        x_min = 0.0
+        x_max = max(1.0, x[-1] if x else 1.0)
+        ax_rssi.set_xlim(x_min, x_max)
+        ax_rssi.set_ylim(y_min, y_max)
+        
+        if show_distance and ax_dist is not None:
+            y_dist_raw = [
+                float("nan")
+                if estimate_distance_m(s.rssi_t1, calib_rssi_ref, args.calibration_distance_m, args.path_loss_exp) is None
+                else estimate_distance_m(s.rssi_t1, calib_rssi_ref, args.calibration_distance_m, args.path_loss_exp)
+                for s in data
+            ]
+            y_dist_esp = [
+                float("nan")
+                if (s.cmp_t1 is None or estimate_distance_m(s.cmp_t1, calib_rssi_ref, args.calibration_distance_m, args.path_loss_exp) is None)
+                else estimate_distance_m(s.cmp_t1, calib_rssi_ref, args.calibration_distance_m, args.path_loss_exp)
+                for s in data
+            ]
+            y_dist_py = [float("nan") if s.py_dist_m is None else s.py_dist_m for s in data]
+            y_dist_py_ukf = [float("nan") if s.py_dist_ukf_m is None else s.py_dist_ukf_m for s in data]
+            y_dist_raw_valid = [v for v in y_dist_raw if not math.isnan(v)]
+            y_dist_esp_valid = [v for v in y_dist_esp if not math.isnan(v)]
+            y_dist_py_valid = [v for v in y_dist_py if not math.isnan(v)]
+            y_dist_py_ukf_valid = [v for v in y_dist_py_ukf if not math.isnan(v)]
+            y_dist_all_valid = y_dist_raw_valid + y_dist_esp_valid + y_dist_py_valid + y_dist_py_ukf_valid
+
+            assert dist_raw_line is not None
+            assert dist_esp_line is not None
+            assert dist_py_line is not None
+            assert dist_py_ukf_line is not None
+            assert dist_h_in_line is not None
+            assert dist_h_out_line is not None
+            dist_raw_line.set_data(x, y_dist_raw)
+            dist_esp_line.set_data(x, y_dist_esp)
+            dist_py_line.set_data(x, y_dist_py)
+            dist_py_ukf_line.set_data(x, y_dist_py_ukf)
+
+            # Convert hysteresis from RSSI to distance
+            h_in_dist = estimate_distance_m(h_in, calib_rssi_ref, args.calibration_distance_m, args.path_loss_exp)
+            h_out_dist = estimate_distance_m(h_out, calib_rssi_ref, args.calibration_distance_m, args.path_loss_exp)
+
+            if y_dist_all_valid:
+                dist_y_min = min(y_dist_all_valid) - 0.5
+                dist_y_max = max(y_dist_all_valid) + 0.5
+            else:
+                dist_y_min = 0.0
+                dist_y_max = 1.0
+
+            if dist_y_min == dist_y_max:
+                dist_y_min -= 0.5
+                dist_y_max += 0.5
+
+            ax_dist.set_xlim(x_min, x_max)
+            ax_dist.set_ylim(dist_y_min, dist_y_max)
+            dist_h_in_line.set_ydata([float("nan") if h_in_dist is None else h_in_dist, float("nan") if h_in_dist is None else h_in_dist])
+            dist_h_out_line.set_ydata([float("nan") if h_out_dist is None else h_out_dist, float("nan") if h_out_dist is None else h_out_dist])
+        
+        # Remove old vlines and add new ones for state changes
+        for vline in vlines_rssi:
+            vline.remove()
+        for vline in vlines_dist:
+            vline.remove()
+        vlines_rssi = []
+        vlines_dist = []
+        
+        for evt_ms, old_st, new_st in state_change_list:
+            # Only show vlines for events inside the visible millis window.
+            if base_ms <= evt_ms <= data[-1].millis:
+                x_evt = (evt_ms - base_ms) / 1000.0
+                color = "#ff7f0e" if new_st == "IN" else "#9467bd"
+                vl_rssi = ax_rssi.axvline(x=x_evt, color=color, linestyle="-", linewidth=0.8, alpha=0.6)
+                vlines_rssi.append(vl_rssi)
+                if show_distance and ax_dist is not None:
+                    vl_dist = ax_dist.axvline(x=x_evt, color=color, linestyle="-", linewidth=0.8, alpha=0.6)
+                    vlines_dist.append(vl_dist)
 
         last = data[-1]
-        status_text.set_text(
-            "total="
-            f"{total} cal={n_cal} train={n_train} cfg={n_cfg} evt={n_evt} bad={bad} unknown={unknown}  "
-            f"raw={last.rssi_t1:.1f} dBm  "
-            f"cmp_fw={(last.cmp_t1 if last.cmp_t1 is not None else float('nan')):.2f} dBm  "
-            f"cmp_py={last.py_t1:.2f} dBm  "
-            f"dist_py={(last.py_dist_m if last.py_dist_m is not None else float('nan')):.2f} m  "
-            f"h_in={h_in:.2f} h_out={h_out:.2f} tipo={last.tipo} state={last_state} millis={last.millis}"
-            f" calib_ref={(calib_rssi_ref if calib_rssi_ref is not None else float('nan')):.2f}"
-        )
+        if show_distance:
+            status_text.set_text(
+                "total="
+                f"{total} cal={n_cal} train={n_train} cfg={n_cfg} evt={n_evt} bad={bad} unknown={unknown}  "
+                f"raw={last.rssi_t1:.1f} dBm  "
+                f"cmp_fw={(last.cmp_t1 if last.cmp_t1 is not None else float('nan')):.2f} dBm  "
+                f"cmp_py={last.py_t1:.2f} dBm  "
+                f"dist_py={(last.py_dist_m if last.py_dist_m is not None else float('nan')):.2f} m  "
+                f"dist_ukf={(last.py_dist_ukf_m if last.py_dist_ukf_m is not None else float('nan')):.2f} m  "
+                f"h_in={h_in:.2f} h_out={h_out:.2f} tipo={last.tipo} state={last_state} millis={last.millis}"
+                f" calib_ref={(calib_rssi_ref if calib_rssi_ref is not None else float('nan')):.2f}"
+            )
+        else:
+            status_text.set_text(
+                "total="
+                f"{total} cal={n_cal} train={n_train} cfg={n_cfg} evt={n_evt} bad={bad} unknown={unknown}  "
+                f"raw={last.rssi_t1:.1f} dBm  "
+                f"cmp_fw={(last.cmp_t1 if last.cmp_t1 is not None else float('nan')):.2f} dBm  "
+                f"cmp_py={last.py_t1:.2f} dBm  "
+                f"h_in={h_in:.2f} h_out={h_out:.2f} tipo={last.tipo} state={last_state} millis={last.millis}"
+            )
 
-        return raw_line, cmp_line, py_line, h_in_line, h_out_line, status_text
+        return ()
 
     anim = FuncAnimation(fig, update, interval=args.refresh_ms, blit=False, cache_frame_data=False)
 
@@ -752,7 +1060,10 @@ def main() -> int:
         thread.join(timeout=1.0)
         for writer in mode_writers.values():
             writer.close()
-        unknown_writer.close()
+        if unknown_writer is not None:
+            unknown_writer.close()
+        if raw_uart_writer is not None:
+            raw_uart_writer.close()
         cfg_writer.close()
         evt_writer.close()
         ser.close()

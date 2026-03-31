@@ -17,7 +17,9 @@ Esta carpeta contiene utilidades para compresion de frontend, captura de RSSI po
     - `scripts/rssi_csv/<YYYYmmdd_HHMMSS>/<YYYYmmdd_HHMMSS>_evt.csv`
   - Guarda ademas muestras de modo desconocido en `scripts/rssi_csv/unknown_mode_latest.csv`.
     - Este archivo se sobreescribe en cada corrida del script.
-  - Grafica en tiempo real `rssi_t1` vs `cmp_t1` y el filtro Python (`py_t1`).
+   - Grafica en tiempo real (2 subplots):
+     - Arriba: `rssi_t1` vs `cmp_t1` vs filtro Python (`py_t1`) con lineas de histeresis RSSI.
+     - Abajo: Distancia estimada con eje X sincronizado + lineas de histeresis convertidas a metros + lineas verticales de cambios de estado IN/OUT.
   - Estima distancia (`py_dist_m`) a partir de `py_t1` (filtro Python) usando `media_calib` de `CFG` como RSSI de referencia a la distancia de calibracion indicada por comando.
   - Soporta filtro fallback (`--filter`) solo si llega linea legacy sin `cmp_t1`.
 
@@ -28,8 +30,7 @@ Esta carpeta contiene utilidades para compresion de frontend, captura de RSSI po
   - Procesa CSV(s) de RSSI offline, aplica Kalman Python y genera dos graficos:
     - `RSSI sin filtrar`
     - `RSSI crudo vs CMP ESP vs Kalman Python`
-  - Tambien genera un CSV procesado con columnas `raw_rssi`, `esp_cmp`, `python_filter`.
-  - Opcionalmente convierte a distancia (`distance_m`) con control por comando:
+  - Tambien genera un CSV procesado con columnas `raw_rssi`, `esp_cmp`, `python_filter`.   - Si se activa conversion a distancia, genera un grafico adicional de distancia estimada vs tiempo (mismo eje X que RSSI) con las 3 curvas (raw/esp/python) para comparacion lado a lado.  - Opcionalmente convierte a distancia (`distance_m`) con control por comando:
     - habilitar/deshabilitar conversion
     - elegir fuente RSSI (`raw`, `python`, `esp`)
     - definir distancia de calibracion y exponente de perdida.
@@ -96,6 +97,14 @@ python scripts/rssi_uart_live.py --port COM6 --baud 115200 --filter kalman --kal
 
 Con eso, `media_calib` se interpreta como RSSI de referencia a `2.5 m` (o el valor que indiques).
 
+**Ejemplo con calibración a 0.8 m:**
+
+```powershell
+python scripts/rssi_uart_live.py --port COM6 --baud 115200 --filter kalman --kalman-source fw-cfg --calibration-distance-m 0.8 --path-loss-exp 2.0
+```
+
+En el gráfico de distancia aparecerán además las líneas de histeresis convertidas a metros (línea punteada y línea con puntos) y líneas verticales cuando hay cambios de estado IN/OUT.
+
 Columnas de cada CSV por modo:
 
 - `pc_time_iso`, `millis`, `tipo`, `rssi_t1`, `cmp_t1`, `py_t1`, `py_dist_m`
@@ -103,6 +112,44 @@ Columnas de cada CSV por modo:
 Con eso podes graficar despues tanto la señal como la evolucion interna del filtro.
 
 ### 3) Postproceso offline de CSV (dos graficos)
+
+CLI recomendado para Kalman lineal (postprocess):
+
+```powershell
+python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --linear-kf-q 2.0 --linear-kf-r 9.0 --linear-kf-x0 -60 --linear-kf-p0 100 --linear-kf-print-config
+```
+
+Para generar una histeresis nueva de Python a partir de CAL (media y varianza):
+
+```powershell
+python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --hysteresis-source python-cal --python-hysteresis-source python --python-hysteresis-k-sigma 1.0
+```
+
+Regla usada en RSSI:
+
+- `hyst_in = media_cal + k * sigma_cal`
+- `hyst_out = media_cal - k * sigma_cal`
+
+Donde `sigma_cal = sqrt(var_cal)` y `k` es `--python-hysteresis-k-sigma`.
+
+Para agregar la nueva gráfica de comparación relativa gamma:
+
+```powershell
+python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --distance-conversion on --gamma-comparison on
+```
+
+Si queres UKF sobre estado gamma (en vez de distancia), activalo con:
+
+```powershell
+python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --distance-conversion on --gamma-comparison on --gamma-ukf on --gamma-ukf-source python
+```
+
+Tambien se mantienen los aliases anteriores por compatibilidad:
+
+- `--kalman-q` == `--linear-kf-q`
+- `--kalman-r` == `--linear-kf-r`
+- `--kalman-x0` == `--linear-kf-x0`
+- `--kalman-p0` == `--linear-kf-p0`
 
 ```powershell
 python scripts/rssi_csv_postprocess.py --input rssi_live.csv --kalman-q 2.0 --kalman-r 9.0 --kalman-x0 -60 --kalman-p0 100
@@ -118,6 +165,8 @@ Con conversion a distancia activada (por defecto usa la salida del filtro Python
 ```powershell
 python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --distance-conversion on --distance-source python --calibration-distance-m 2.5 --path-loss-exp 2.0
 ```
+
+Esto genera ademas un grafico `<input>_distance.png` mostrando las 3 curvas de distancia con el mismo eje X para comparacion.
 
 Si no queres conversion, deja el default:
 
