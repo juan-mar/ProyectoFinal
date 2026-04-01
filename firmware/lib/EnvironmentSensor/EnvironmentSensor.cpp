@@ -1,12 +1,35 @@
 #include "EnvironmentSensor.h"
 #include "Config.h"
 #include "HardwareConfig.h"
+#include <Wire.h>
 
 bool EnvironmentSensor::init() {
-    // 0x76 o 0x77 son las direcciones comunes del BME280
-    if (!_bme.begin(ENV_BME280_I2C_ADDRESS)) {
-        return false;
+    LOG_PRINTF("[EnvSensor] Init: SDA=%d SCL=%d prefAddr=0x%02X\n",
+               PIN_BME_SDA,
+               PIN_BME_SCL,
+               ENV_BME280_I2C_ADDRESS);
+
+    Wire.begin(PIN_BME_SDA, PIN_BME_SCL);
+
+    // Try preferred address first, then fallback to the other common BME280 address.
+    uint8_t firstAddr = static_cast<uint8_t>(ENV_BME280_I2C_ADDRESS);
+    uint8_t secondAddr = (firstAddr == 0x76) ? 0x77 : 0x76;
+
+    if (!_bme.begin(firstAddr, &Wire)) {
+        LOG_PRINTF("[EnvSensor] BME280 not found at 0x%02X, trying 0x%02X...\n",
+                   firstAddr,
+                   secondAddr);
+
+        if (!_bme.begin(secondAddr, &Wire)) {
+            LOG_PRINTLN("[EnvSensor] ERROR: BME280 init failed on 0x76 and 0x77.");
+            return false;
+        }
+
+        LOG_PRINTF("[EnvSensor] BME280 initialized at fallback address 0x%02X\n", secondAddr);
+    } else {
+        LOG_PRINTF("[EnvSensor] BME280 initialized at preferred address 0x%02X\n", firstAddr);
     }
+
     _initialized = true;
     _lastValidReadTime = 0;
     return true;

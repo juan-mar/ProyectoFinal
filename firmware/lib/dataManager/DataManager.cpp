@@ -21,6 +21,39 @@
 // Safety margin to avoid LittleFS allocator crash near full capacity.
 #define LITTLEFS_SAFE_FREE_HEADROOM_BYTES 8192
 
+static bool ensureSessionsDirectoryReady(const char* dirPath) {
+    if (!LittleFS.exists(dirPath)) {
+        if (!LittleFS.mkdir(dirPath)) {
+            LOG_PRINTF("DataManager: Failed to create session directory: %s\n", dirPath);
+            return false;
+        }
+        return true;
+    }
+
+    File sessionsPath = LittleFS.open(dirPath, "r");
+    if (!sessionsPath) {
+        LOG_PRINTF("DataManager: Path exists but cannot be opened: %s\n", dirPath);
+        return false;
+    }
+
+    bool isDir = sessionsPath.isDirectory();
+    sessionsPath.close();
+
+    if (!isDir) {
+        LOG_PRINTF("DataManager: Path is not a directory, recreating: %s\n", dirPath);
+        if (!LittleFS.remove(dirPath)) {
+            LOG_PRINTF("DataManager: Failed to remove non-directory path: %s\n", dirPath);
+            return false;
+        }
+        if (!LittleFS.mkdir(dirPath)) {
+            LOG_PRINTF("DataManager: Failed to recreate session directory: %s\n", dirPath);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /****************************************************************
  * Class Method Implementations
  ****************************************************************/
@@ -65,9 +98,10 @@ LOG_PRINTLN("Initializing DataManager...");
     LOG_PRINTLN("LittleFS mounted.");
     
     if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
-        if (!LittleFS.exists(DIR_SESSIONS)) {
-            LOG_PRINTLN("Session directory not found, creating...");
-            LittleFS.mkdir(DIR_SESSIONS);
+        if (!ensureSessionsDirectoryReady(DIR_SESSIONS)) {
+            LOG_PRINTLN("FATAL: Session directory is not usable.");
+            xSemaphoreGive(storageMutex);
+            return false;
         }
         _reconstructActiveChunk();
         xSemaphoreGive(storageMutex);
@@ -224,24 +258,36 @@ bool DataManager::saveSessionToChunk(String sessionJsonString,
     if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
 
         // Runtime format ('-') removes the sessions directory; recreate on demand.
-        if (!LittleFS.exists(DIR_SESSIONS)) {
-            if (!LittleFS.mkdir(DIR_SESSIONS)) {
-                status = SESSION_SAVE_OPEN_FAILED;
-                LOG_PRINTLN("DataManager: Failed to recreate /sessions directory.");
-                xSemaphoreGive(storageMutex);
-                if (outStatus) *outStatus = status;
-                return false;
-            }
+        // Also recovers if /sessions exists as a file instead of a directory.
+        if (!ensureSessionsDirectoryReady(DIR_SESSIONS)) {
+            status = SESSION_SAVE_OPEN_FAILED;
+            LOG_PRINTLN("DataManager: /sessions path is not usable.");
+            xSemaphoreGive(storageMutex);
+            if (outStatus) *outStatus = status;
+            return false;
         }
 
         // Rotate: create a new chunk when the active one is full or missing
         if (_activeChunkPath.length() == 0 || _activeChunkLineCount >= MAX_SESSIONS_PER_CHUNK) {
-            String sanitized = startedAt;
-            sanitized.replace(":", "-");
-            sanitized.replace(".", "-");
-            sanitized.trim();
-            if (sanitized.length() == 0) sanitized = String(millis());
-            _activeChunkPath = String(DIR_SESSIONS) + "/chunk_" + sanitized + ".log";
+            // Keep chunk file names short to respect LittleFS entry-name limits on ESP32.
+            // Example: chunk_20260401002944349.log (<= 31 chars for the file component)
+            String compactTs = "";
+            compactTs.reserve(20);
+            for (size_t i = 0; i < startedAt.length(); i++) {
+                char c = startedAt.charAt(i);
+                if (c >= '0' && c <= '9') {
+                    compactTs += c;
+                }
+            }
+            if (compactTs.length() >= 17) {
+                compactTs = compactTs.substring(0, 17); // YYYYMMDDHHMMSSmmm
+            }
+            if (compactTs.length() == 0) {
+                compactTs = String(millis());
+            }
+
+            String chunkFilename = String("chunk_") + compactTs + ".log";
+            _activeChunkPath = String(DIR_SESSIONS) + "/" + chunkFilename;
             _activeChunkLineCount = 0;
             LOG_PRINTF("DataManager: New chunk: %s\n", _activeChunkPath.c_str());
         }

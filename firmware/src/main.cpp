@@ -8,11 +8,13 @@
  ****************************************************************/
 #include <Arduino.h>
 #include <esp_system.h>
+#include <Wire.h>
 #include "config.h"       // For LOG_... macros
 #include "StateManager.h" // The FSM
 #include "DataManager.h"  // The memory/storage manager
 #include "SupabaseClient.h"
 #include "HardwareManager.h"
+#include "HardwareConfig.h"
 #include "Credentials.h"
 #include "TrainingSession.h"
 #include "WebServerManager.h"
@@ -94,6 +96,7 @@ static String buildDirtyTestIso();
 static bool saveRawSessionForTest(const String& startedAt,
                                   const String& rawJson,
                                   const char* label);
+static void runI2CScanner();
 
 #if EVENT_LOGGER_LCD_ENABLED
 /**
@@ -102,6 +105,32 @@ static bool saveRawSessionForTest(const String& startedAt,
  */
 void eventLoggerLCDTask(void* parameter);
 #endif
+
+static void runI2CScanner() {
+    LOG_PRINTF("\n[I2C] Scanner start (SDA=%d, SCL=%d)\n", PIN_BME_SDA, PIN_BME_SCL);
+
+    Wire.begin(PIN_BME_SDA, PIN_BME_SCL);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
+
+    int found = 0;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+        Wire.beginTransmission(addr);
+        uint8_t error = Wire.endTransmission();
+
+        if (error == 0) {
+            LOG_PRINTF("[I2C] Found device at 0x%02X\n", addr);
+            found++;
+        } else if (error == 4) {
+            LOG_PRINTF("[I2C] Unknown error at 0x%02X\n", addr);
+        }
+    }
+
+    if (found == 0) {
+        LOG_PRINTLN("[I2C] No I2C devices found.");
+    }
+
+    LOG_PRINTLN("[I2C] Scanner end.\n");
+}
 
 /****************************************************************
  * Setup Function
@@ -242,6 +271,7 @@ void setup() {
     LOG_PRINTLN(" 'h' -> Write a RECOVERABLE dirty session (invalid optional fields)");
     LOG_PRINTLN(" 'H' -> Write an UNRECOVERABLE dirty session (invalid critical fields)");
     LOG_PRINTLN(" 'M' -> Write a mixed block: clean + recoverable + unrecoverable + clean");
+    LOG_PRINTLN(" 'I' -> Scan I2C bus (BME wires)");
     LOG_PRINTLN(" 'l' -> List local dog_list.json content");
 
 #if TEST_LITTLEFS_CAPACITY == 1
@@ -554,6 +584,11 @@ void loop() {
                         saveRawSessionForTest(s3, unrecoverable, "MIX-UNRECOVERABLE");
                         saveRawSessionForTest(s4, clean2, "MIX-CLEAN-2");
                     }
+                    sendEvent = false;
+                    break;
+
+                case 'I': // I2C scanner for BME280 diagnostics
+                    runI2CScanner();
                     sendEvent = false;
                     break;
 

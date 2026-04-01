@@ -27,7 +27,7 @@
 #define DEBUG_MODE 1
 #define PIN_DEBUG_MODE 1
 #define TEST_LANZAMIENTOS 0
-#define TEST_LITTLEFS_CAPACITY 0
+#define TEST_LITTLEFS_CAPACITY 1
 
 /****************************************************************
  * Logger Macros (The smart part)
@@ -79,7 +79,6 @@
 /****************************************************************
  * Event Logger Configuration
  ****************************************************************/
-
 #define EVENT_LOGGER_ENABLED 1
 #define EVENT_LOGGER_LCD_ENABLED 1
 #define EVENT_LOGGER_WEB_ENABLED 1
@@ -95,17 +94,11 @@
 // #define EVENT_LCD_COLS 16
 // #define EVENT_LCD_ROWS 2
 
-#define RSSI_LOGGER_ENABLED 1
+#define RSSI_LOGGER_ENABLED 0
 #define RSSI_LOGGER_BUFFER_SIZE 100  // Entries per batch (100 * 8 bytes = 800B)
-                                      // Flushes to LittleFS automatically when buffer fills
-// Queue size for high-rate DAT messages enqueued from BLE callback context.
 #define RSSI_LOGGER_UART_DAT_QUEUE_SIZE 128
-// Max DAT rows sent per poll cycle from task context.
 #define RSSI_LOGGER_UART_DAT_BURST 8
-// Legacy live sample format: "millis,mode,rssi" (disable to avoid callback UART writes).
 #define RSSI_LOGGER_LEGACY_LIVE_SAMPLE_ENABLED 0
-// Enable/disable binary RAM dump command ('&') over UART.
-// Keep this at 0 to avoid confusion while using DAT/EVT/CFG live stream.
 #define RSSI_LOGGER_DUMP_ENABLED 0
 
 // Compile-time transport for live RSSI sample output
