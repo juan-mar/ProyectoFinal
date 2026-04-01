@@ -17,4 +17,4 @@ def login(email, password):
 
 if __name__ == "__main__":
     # EDITA acá con tus credenciales creadas en Supabase Auth → Users
-    login("guest@demo.test", "guest1")
+    login("lanzador_01@device.test", "lanzador_01")

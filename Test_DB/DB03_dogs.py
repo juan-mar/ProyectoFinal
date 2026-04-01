@@ -25,7 +25,7 @@ def list_dogs(token=ADMIN_TOKEN, only_active=True, limit=100):
     print(r.status_code); print(json.dumps(r.json(), indent=2))
 
 if __name__ == "__main__":
-    ad_token = login("admin@demo.test", "admin1234")    
+    ad_token = login("lanzador_01@device.test", "lanzador_01")    
     #Ya agregados
     #add_dog("FIRU-001", "Firulais", breed="Labrador", sex="M", unit="K9", token=ad_token)
     #add_dog("LUNA-002", "Luna", breed="Pastor Alemán", sex="F", unit="K9", token=ad_token)

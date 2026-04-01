@@ -104,7 +104,7 @@ alter table public.dogs enable row level security;
 drop policy if exists "dogs_read_all" on public.dogs;
 create policy "dogs_read_all"
   on public.dogs for select
-  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('guest','trainer','admin')));
+  using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('guest','trainer','admin', 'device')));
 
 drop policy if exists "dogs_admin_crud" on public.dogs;
 -- admin: puede seleccionar/insertar/actualizar/borrar
@@ -376,15 +376,12 @@ grant execute on function public.promote_user(text, text, text) to anon, authent
 drop function if exists public.record_training_batch(jsonb);
 
 create or replace function public.record_training_batch(p_items jsonb)
-returns json
+returns void
 language plpgsql
 security definer
 as $$
 declare
-  item        jsonb;
-  v_count_ok  int := 0;
-  v_count_err int := 0;
-  v_errors    jsonb := '[]'::jsonb;
+  item jsonb;
 begin
   if p_items is null or jsonb_typeof(p_items) <> 'array' then
     raise exception 'p_items debe ser un array JSON';
@@ -392,49 +389,27 @@ begin
 
   for item in select jsonb_array_elements(p_items)
   loop
-    begin
-      -- valida campos mínimos
-      perform
-        (item->>'p_dog_code')::text,
-        (item->>'p_started_at')::timestamptz,
-        (item->>'p_duration_s')::int,
-        (item->>'p_result')::text,
-        (item->'p_conditions')::jsonb,
-        (item->'p_type')::jsonb,
-        (item->>'p_device_code')::text;
+    -- Validación rápida de campos nulos
+    if item->>'p_dog_code' is null or item->>'p_device_code' is null then
+       raise exception 'Faltan campos obligatorios: p_dog_code o p_device_code';
+    end if;
 
-      -- reusar el unitario (ahora por device_code)
-      perform public.record_training(
-        item->>'p_dog_code',
-        (item->>'p_started_at')::timestamptz,
-        (item->>'p_duration_s')::int,
-        item->>'p_result',
-        item->'p_conditions',
-        item->'p_type',
-        item->>'p_device_code',
-        (item->>'p_co_trainer_id')::uuid
-      );
-
-      v_count_ok := v_count_ok + 1;
-
-    exception when others then
-      v_count_err := v_count_err + 1;
-      v_errors := v_errors || jsonb_build_array(
-        jsonb_build_object('item', item, 'error', SQLERRM)
-      );
-    end;
+    -- Llamamos a la función unitaria. Si esto falla, abortará toda la función batch.
+    perform public.record_training(
+      item->>'p_dog_code',
+      (item->>'p_started_at')::timestamptz,
+      (item->>'p_duration_s')::int,
+      item->>'p_result',
+      item->'p_conditions',
+      item->'p_type',
+      item->>'p_device_code',
+      (item->>'p_co_trainer_id')::uuid
+    );
   end loop;
-
-  return json_build_object(
-    'ok', v_count_ok,
-    'errors', v_count_err,
-    'details', v_errors
-  );
 end;
 $$;
 
 grant execute on function public.record_training_batch(jsonb) to anon, authenticated;
-
 
 -- === 9) Devuelve el UUID de un usuario por email (case-insensitive)
 -- SECURITY DEFINER para poder leer auth.users sin RLS
