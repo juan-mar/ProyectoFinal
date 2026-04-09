@@ -47,7 +47,7 @@ enum SessionSaveStatus {
 };
 
 // Session validation limits
-#define MIN_SESSION_DURATION_S 5
+#define MIN_SESSION_DURATION_S 0
 #define MAX_SESSION_DURATION_S 3600
 #define MAX_SESSION_TIMEOUT_S 7200
 #define MIN_VALID_TEMPERATURE_C -20.0f

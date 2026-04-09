@@ -36,4 +36,12 @@ public:
     EnvData getLastValidReadings();
 };
 
+/*
+marron sda
+verde scl
+negro gnd 
+rojo vin  
+
+*/
+
 #endif

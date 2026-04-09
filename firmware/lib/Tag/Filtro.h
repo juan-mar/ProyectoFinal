@@ -24,6 +24,8 @@ class Filtro {
     void set_varianzaR(float var);
 
     void set_varianzaQ(float var);
+
+    void reset(float x0 = -100.0f, float p0 = 100.0f);
     
     float filtrado(float nuevaMuestra);
 

@@ -281,12 +281,14 @@ function setMode(mode) {
 // === PERSISTENCIA DE DATOS ===
 
 function saveFormData() {
+    const durationRaw = parseInt(document.getElementById('durationInput').value, 10);
+    const durationVal = Number.isNaN(durationRaw) ? 30 : durationRaw;
     const data = {
         dogCode: document.getElementById('dogSelector').value,
         substance: document.getElementById('substanceSelector').value,
         distractors: document.getElementById('distractorsCheckbox').checked,
         context: document.getElementById('contextInput').value,
-        duration: parseInt(document.getElementById('durationInput').value) || 30,
+        duration: durationVal,
         timeout: parseInt(document.getElementById('timeoutInput').value) || 120,
         mode: currentMode,
         timestamp: Date.now()
@@ -328,7 +330,7 @@ function restoreFormData() {
                 document.getElementById('contextInput').value = data.context;
             }
             
-            if (data.duration) {
+            if (data.duration !== undefined && data.duration !== null) {
                 const durationInput = document.getElementById('durationInput');
                 durationInput.value = data.duration;
                 document.getElementById('durationHelper').innerText = data.duration + ' segundos';
@@ -481,7 +483,8 @@ async function startTraining() {
     const substanceVal = document.getElementById('substanceSelector').value;
     const distractorsVal = document.getElementById('distractorsCheckbox').checked;
     const contextVal = document.getElementById('contextInput').value;
-    const durationVal = parseInt(document.getElementById('durationInput').value) || 30;
+    const durationRaw = parseInt(document.getElementById('durationInput').value, 10);
+    const durationVal = Number.isNaN(durationRaw) ? 30 : durationRaw;
     const timeoutVal = parseInt(document.getElementById('timeoutInput').value) || 120;
 
     saveFormData();
@@ -502,8 +505,8 @@ async function startTraining() {
     }
 
     // Validamos la duración siempre
-    if (durationVal < 5 || durationVal > 120) {
-        alert("⚠️ La duración debe estar entre 5 y 120 segundos.");
+    if (durationVal < 0 || durationVal > 120) {
+        alert("⚠️ La duración debe estar entre 0 y 120 segundos.");
         return;
     }
 

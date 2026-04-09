@@ -67,8 +67,19 @@ Receptor::Receptor(String targetMac) {
     _targetMac = targetMac;
     _targetMac.toUpperCase();
     rssiActual = -100;            // Valor inicial lejos
+    rssi_filtered = -100.0f;      // Estado filtrado inicial lejos
     new_msg = false;
     state = 0;
+    _prevStateDetected = NOT_DETECTED;
+}
+
+void Receptor::prepareDetectionStart() {
+    // Mantener threshold/barrier de calibracion, pero arrancar el filtro en estado "lejos".
+    filtro_kalman.reset(-100.0f, 100.0f);
+    rssiActual = -100;
+    rssi_filtered = -100.0f;
+    in_thres = false;
+    new_msg = false;
     _prevStateDetected = NOT_DETECTED;
 }
 
@@ -76,6 +87,10 @@ Receptor::Receptor(String targetMac) {
 // Inicia los callbacks y el escaneo de dispositivos (propio de BLE)
 void Receptor::init() {
   BLEDevice::init("");
+
+    // Arrancamos siempre en estado "lejos" para evitar detecciones espurias al inicio.
+    prepareDetectionStart();
+
     _pBLEScan = BLEDevice::getScan();       //Iniciamos el escaneo de dispositivos
     
     // El segundo parámetro 'true' significa: wantDuplicates. Sino se registra el primer valor y nada mas.

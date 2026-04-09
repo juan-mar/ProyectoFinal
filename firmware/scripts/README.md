@@ -17,9 +17,9 @@ Esta carpeta contiene utilidades para compresion de frontend, captura de RSSI po
     - `scripts/rssi_csv/<YYYYmmdd_HHMMSS>/<YYYYmmdd_HHMMSS>_evt.csv`
   - Guarda ademas muestras de modo desconocido en `scripts/rssi_csv/unknown_mode_latest.csv`.
     - Este archivo se sobreescribe en cada corrida del script.
-   - Grafica en tiempo real (2 subplots):
-     - Arriba: `rssi_t1` vs `cmp_t1` vs filtro Python (`py_t1`) con lineas de histeresis RSSI.
-     - Abajo: Distancia estimada con eje X sincronizado + lineas de histeresis convertidas a metros + lineas verticales de cambios de estado IN/OUT.
+  - Grafica en tiempo real (2 subplots):
+    - Arriba: `rssi_t1` vs `cmp_t1` vs filtro Python (`py_t1`) con lineas de histeresis RSSI.
+    - Abajo: Distancia estimada con eje X sincronizado + lineas de histeresis convertidas a metros + lineas verticales de cambios de estado IN/OUT.
   - Estima distancia (`py_dist_m`) a partir de `py_t1` (filtro Python) usando `media_calib` de `CFG` como RSSI de referencia a la distancia de calibracion indicada por comando.
   - Soporta filtro fallback (`--filter`) solo si llega linea legacy sin `cmp_t1`.
 
@@ -34,6 +34,13 @@ Esta carpeta contiene utilidades para compresion de frontend, captura de RSSI po
     - habilitar/deshabilitar conversion
     - elegir fuente RSSI (`raw`, `python`, `esp`)
     - definir distancia de calibracion y exponente de perdida.
+
+- `rssi_csv_postprocess_simple.py`
+  - Variante simplificada del postprocess offline.
+  - Genera un unico grafico por CSV con solo:
+    - `RSSI crudo`
+    - `Filtro de Kalman` (tomado de `cmp_t1`/`cmp` del CSV)
+  - No dibuja lineas de histeresis ni lineas verticales de eventos.
 
 - `requirements.txt`
   - Dependencias Python congeladas (`pip freeze`) para este entorno.
@@ -113,6 +120,12 @@ Con eso podes graficar despues tanto la señal como la evolucion interna del fil
 
 ### 3) Postproceso offline de CSV (dos graficos)
 
+Variante simple (solo `RSSI crudo` y `Filtro de Kalman`):
+
+```powershell
+python scripts/rssi_csv_postprocess_simple.py --input scripts/rssi_csv
+```
+
 CLI recomendado para Kalman lineal (postprocess):
 
 ```powershell
@@ -159,6 +172,7 @@ Tambien podes procesar en lote toda la carpeta de corridas:
 
 ```powershell
 python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --kalman-q 2.0 --kalman-r 9.0 --kalman-x0 -60 --kalman-p0 100
+```
 
 Con conversion a distancia activada (por defecto usa la salida del filtro Python):
 
@@ -172,7 +186,6 @@ Si no queres conversion, deja el default:
 
 ```powershell
 python scripts/rssi_csv_postprocess.py --input scripts/rssi_csv --distance-conversion off
-```
 ```
 
 En modo carpeta, el script busca y procesa:

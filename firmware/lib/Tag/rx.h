@@ -66,6 +66,9 @@ class Receptor {
         Utiliza funcion de filtrado y registra el valor en rssi_filtered*/
         void _procesarDato(int rssi);
 
+        // Reinicia solo el estado de detección/filtro sin perder threshold calibrado.
+        void prepareDetectionStart();
+
         int getRSSI();
         float getFilteredRSSI();
         float getThreshold() const;

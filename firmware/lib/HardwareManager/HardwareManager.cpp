@@ -526,10 +526,20 @@ void HardwareManager::processCommand(HwMessage msg) {
 // --- MÉTODOS AUXILIARES ESPECÍFICOS ---
 void HardwareManager::enableTag(bool calibrationMode) {
     #if ENABLE_TAG_READER
+    if (!calibrationMode) {
+        // Proteccion extra: al entrar a DETECTION arrancamos "lejos" aunque venga de calibracion.
+        _bleScanner.prepareDetectionStart();
+    }
+
     if (!_peripheralState.tagEnabled) {
         _peripheralState.tagEnabled = true;
-        _bleScanner.state = calibrationMode ? CALIBRATION_RX : DETECTION_RX; // Configuramos el estado del driver según el modo   
-        LOG_PRINTF("[HW] TAG powered ON (mode: %s)\n", 
+        _bleScanner.state = calibrationMode ? CALIBRATION_RX : DETECTION_RX;
+        LOG_PRINTF("[HW] TAG powered ON (mode: %s)\n",
+                   calibrationMode ? "CALIBRATION" : "DETECTION");
+    } else {
+        // Si el scanner ya estaba encendido, igual permitimos actualizar el modo.
+        _bleScanner.state = calibrationMode ? CALIBRATION_RX : DETECTION_RX;
+        LOG_PRINTF("[HW] TAG mode switched to: %s\n",
                    calibrationMode ? "CALIBRATION" : "DETECTION");
     }
     #endif

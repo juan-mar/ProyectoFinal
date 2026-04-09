@@ -22,7 +22,7 @@ float Filtro::filtroKalman(float nuevaMuestra){
 /************************* CLASE FILTRO - FUNCIONES PUBLICAS ******************************/
 
 Filtro::Filtro(){ // Constructor
-    x0_init = -50;
+    x0_init = -100;
     p0_init = 100;
     x_est = x0_init;
     P_est = p0_init;
@@ -39,6 +39,13 @@ void Filtro::set_varianzaR(float var){
 }
 void Filtro::set_varianzaQ(float var){
     varianzaQ = var;
+}
+
+void Filtro::reset(float x0, float p0) {
+    x0_init = x0;
+    p0_init = p0;
+    x_est = x0_init;
+    P_est = p0_init;
 }
 
 float Filtro::filtrado(float nuevaMuestra){
