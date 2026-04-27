@@ -39,9 +39,9 @@
 #define ENV_BME280_I2C_ADDRESS 0x76 // Dirección I2C del BME280 (0x76 o 0x77)
 
 // --- LED Control ---
-#define PIN_LED_R 25
-#define PIN_LED_G 26
-#define PIN_LED_B 27
+#define PIN_LED_R 27    //se vio verde
+#define PIN_LED_G 25    //se vio azul
+#define PIN_LED_B 26
 #define LED_ACTIVE 0     // Nivel lógico para encender el LED (1=HIGH, 0=LOW)
 
 #define LED_PWM_CHANNEL_R 0

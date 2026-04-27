@@ -764,6 +764,27 @@ float HardwareManager::getBatteryVoltage() {
     return info.voltage;
 }
 
+const char* HardwareManager::getBatteryLevelText() {
+    if (!_batteryMonitor.isInitialized()) {
+        LOG_PRINTLN("[HW] Battery Monitor not initialized");
+        return "UNKNOWN";
+    }
+
+    BatteryInfo info = _batteryMonitor.getInfo();
+    switch ((BatteryLevel)info.level) {
+        case BATTERY_LEVEL_HIGH:
+            return "HIGH";
+        case BATTERY_LEVEL_MEDIUM:
+            return "MEDIUM";
+        case BATTERY_LEVEL_LOW:
+            return "LOW";
+        case BATTERY_LEVEL_CRITICAL:
+            return "CRITICAL";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 EnvData HardwareManager::getEnvironmentData() {
     return _environmentSensor.getLastValidReadings();
 }

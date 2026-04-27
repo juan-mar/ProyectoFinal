@@ -9,7 +9,15 @@
 <body>
     <header>
         <div class="status-bar">
-            <span>🔋 <span id="bat-val">--</span>%</span>
+            <span id="battery-status" class="battery-status battery-unknown">
+                <span class="battery-shell" aria-hidden="true">
+                    <span class="battery-bar"></span>
+                    <span class="battery-bar"></span>
+                    <span class="battery-bar"></span>
+                    <span class="battery-alert">!</span>
+                </span>
+                <span id="bat-val">--</span>
+            </span>
             <span>💾 <span id="sess-val">--</span> Pen.</span>
             <span>📱 <span id="device-code">--</span></span>
         </div>

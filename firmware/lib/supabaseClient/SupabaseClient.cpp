@@ -16,7 +16,9 @@
 SupabaseClient::SupabaseClient(const char* baseUrl, const char* apiKey)
     : supabaseUrl(baseUrl), supabaseApiKey(apiKey)
 {
-    // Constructor stores the base URL and API key
+    // Use an explicit TLS client so HTTPS handshakes do not depend on
+    // certificate provisioning or a synchronized clock.
+    secureClient.setInsecure();
 }
 
 bool SupabaseClient::login(String email, String password, String &outAccessToken) {
@@ -31,7 +33,7 @@ bool SupabaseClient::login(String email, String password, String &outAccessToken
     String jsonBody;
     serializeJson(doc, jsonBody);
 
-    http.begin(url);
+    http.begin(secureClient, url);
     http.setTimeout(15000); // 15 segundos timeout
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + supabaseApiKey);
@@ -68,7 +70,7 @@ bool SupabaseClient::listDogs(String accessToken, String &outJsonString) {
     String url = supabaseUrl + "/rest/v1/dogs";
     String params = "?select=*&active=eq.true&order=created_at.desc";
 
-    http.begin(url + params);
+    http.begin(secureClient, url + params);
     http.setTimeout(15000); // 15 segundos timeout
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + accessToken);
@@ -98,7 +100,7 @@ UploadResult SupabaseClient::recordTrainingBatch(String accessToken, String batc
     LOG_PRINTLN(batchJsonString);
     LOG_PRINTLN("---------------------------");
 
-    http.begin(url);
+    http.begin(secureClient, url);
     http.setTimeout(15000); // 15 segundos timeout
     http.addHeader("apikey", supabaseApiKey);
     http.addHeader("Authorization", "Bearer " + accessToken);

@@ -366,6 +366,47 @@ function hideOverlay() {
     document.getElementById('overlay').classList.add('hidden');
 }
 
+function normalizeBatteryLevel(levelRaw, percentRaw) {
+    if (typeof levelRaw === 'string' && levelRaw.length > 0) {
+        return levelRaw.toUpperCase();
+    }
+
+    const percent = Number(percentRaw);
+    if (Number.isNaN(percent)) {
+        return 'UNKNOWN';
+    }
+    if (percent >= 70) return 'HIGH';
+    if (percent >= 40) return 'MEDIUM';
+    if (percent >= 15) return 'LOW';
+    return 'CRITICAL';
+}
+
+function updateBatteryIndicator(levelRaw, percentRaw) {
+    const statusEl = document.getElementById('battery-status');
+    const valueEl = document.getElementById('bat-val');
+    if (!statusEl || !valueEl) return;
+
+    const level = normalizeBatteryLevel(levelRaw, percentRaw);
+    statusEl.classList.remove('battery-high', 'battery-medium', 'battery-low', 'battery-critical', 'battery-unknown');
+
+    if (level === 'HIGH') {
+        statusEl.classList.add('battery-high');
+        valueEl.innerText = 'Alto';
+    } else if (level === 'MEDIUM') {
+        statusEl.classList.add('battery-medium');
+        valueEl.innerText = 'Medio';
+    } else if (level === 'LOW') {
+        statusEl.classList.add('battery-low');
+        valueEl.innerText = 'Bajo';
+    } else if (level === 'CRITICAL') {
+        statusEl.classList.add('battery-critical');
+        valueEl.innerText = 'Critico';
+    } else {
+        statusEl.classList.add('battery-unknown');
+        valueEl.innerText = '--';
+    }
+}
+
 async function checkConnection() {
     try {
         const response = await fetch('/api/status', { 
@@ -378,7 +419,7 @@ async function checkConnection() {
             const data = await response.json();
             
             // Actualizar UI con datos de status
-            document.getElementById('bat-val').innerText = data.battery;
+            updateBatteryIndicator(data.battery_level, data.battery);
             document.getElementById('sess-val').innerText = data.pending_sessions;
             if (data.device_code) {
                 document.getElementById('device-code').innerText = data.device_code;

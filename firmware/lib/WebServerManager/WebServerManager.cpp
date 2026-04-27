@@ -202,8 +202,10 @@ void WebServerManager::handleApiGetStatus(AsyncWebServerRequest *request) {
     if (hardwareManager != nullptr) {
         int batteryPercent = hardwareManager->getBatteryPercentage();
         doc["battery"] = (batteryPercent >= 0) ? batteryPercent : 0;
+        doc["battery_level"] = hardwareManager->getBatteryLevelText();
     } else {
         doc["battery"] = 0;  // Fallback si HardwareManager no está disponible
+        doc["battery_level"] = "UNKNOWN";
     }
 
     String response;

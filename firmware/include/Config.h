@@ -24,10 +24,17 @@
  * When set to 0, all LOG_... macros are compiled out,
  * saving flash space and execution time.
  */
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 #define PIN_DEBUG_MODE 1
 #define TEST_LANZAMIENTOS 0
 #define TEST_LITTLEFS_CAPACITY 1
+
+// Max number of training sessions stored per .log chunk file in /sessions
+#define DATA_MAX_SESSIONS_PER_CHUNK 40
+//197 con N=5  //formateado
+//392 con N=10  //formateado
+//362 con N=20 //414 formateado
+//362 con N=30  //418 formateado
 
 /****************************************************************
  * Logger Macros (The smart part)
@@ -40,7 +47,7 @@
 #endif
 
 #if TEST_LITTLEFS_CAPACITY == 1
-#define TEST_LITTLEFS_CAPACITY_MAX_FILES 20
+#define TEST_LITTLEFS_CAPACITY_MAX_FILES 0
 #define TEST_LITTLEFS_CAPACITY_DURATION_S 60
 #endif
 

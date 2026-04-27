@@ -690,13 +690,16 @@ def plot_raw_vs_filtered(
     inferred_changes: Sequence[Tuple[float, str]] = [],
     inferred_py_changes: Sequence[Tuple[float, str]] = [],
     firmware_events: Sequence[Tuple[float, str]] = [],
+    plot_mode: str = "full",
+    show_firmware_events: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10, 4.5))
     ax.plot(x_axis, raw_values, color="#1f77b4", linewidth=1.1, label="RSSI crudo")
     if any(v is not None for v in esp_cmp_values):
         esp_y = [float("nan") if v is None else v for v in esp_cmp_values]
-        ax.plot(x_axis, esp_y, color="#2ca02c", linewidth=1.6, label="CMP ESP")
-    ax.plot(x_axis, py_values, color="#d62728", linewidth=1.8, label="Filtro Python")
+        ax.plot(x_axis, esp_y, color="#ef0808", linewidth=1.6, label="RSSI Filtrado")
+    if plot_mode != "fw-only":
+        ax.plot(x_axis, py_values, color="#d62728", linewidth=1.8, label="Filtro Python")
     if fw_hysteresis_in is not None:
         ax.axhline(
             y=fw_hysteresis_in,
@@ -704,7 +707,7 @@ def plot_raw_vs_filtered(
             linestyle="--",
             linewidth=1.1,
             alpha=0.9,
-            label="Histeresis FW IN (CMP)",
+            label="Umbral IN",
         )
     if fw_hysteresis_out is not None:
         ax.axhline(
@@ -713,9 +716,9 @@ def plot_raw_vs_filtered(
             linestyle=":",
             linewidth=1.1,
             alpha=0.9,
-            label="Histeresis FW OUT (CMP)",
+            label="Umbral OUT",
         )
-    if py_hysteresis_in is not None:
+    if plot_mode != "fw-only" and py_hysteresis_in is not None:
         ax.axhline(
             y=py_hysteresis_in,
             color="#d62728",
@@ -724,7 +727,7 @@ def plot_raw_vs_filtered(
             alpha=0.9,
             label="Histeresis PY IN (two-stage)",
         )
-    if py_hysteresis_out is not None:
+    if plot_mode != "fw-only" and py_hysteresis_out is not None:
         ax.axhline(
             y=py_hysteresis_out,
             color="#d62728",
@@ -743,32 +746,37 @@ def plot_raw_vs_filtered(
         color = "#ff7f0e" if st == "IN" else "#9467bd"
         lbl = None
         if st == "IN" and not cmp_in_labeled:
-            lbl = "Cambio IN (CMP+Hyst FW)"
+            lbl = "Evento IN"
             cmp_in_labeled = True
         elif st == "OUT" and not cmp_out_labeled:
-            lbl = "Cambio OUT (CMP+Hyst FW)"
+            lbl = "Evento OUT"
             cmp_out_labeled = True
         ax.axvline(x=x_evt, color=color, linestyle="-", linewidth=0.9, alpha=0.6, label=lbl)
 
-    for x_evt, st in inferred_py_changes:
-        color = "#17becf" if st == "IN" else "#e377c2"
-        lbl = None
-        if st == "IN" and not py_in_labeled:
-            lbl = "Cambio IN (Python+Hyst PY)"
-            py_in_labeled = True
-        elif st == "OUT" and not py_out_labeled:
-            lbl = "Cambio OUT (Python+Hyst PY)"
-            py_out_labeled = True
-        ax.axvline(x=x_evt, color=color, linestyle="-.", linewidth=1.0, alpha=0.7, label=lbl)
+    if plot_mode != "fw-only":
+        for x_evt, st in inferred_py_changes:
+            color = "#17becf" if st == "IN" else "#e377c2"
+            lbl = None
+            if st == "IN" and not py_in_labeled:
+                lbl = "Cambio IN (Python+Hyst PY)"
+                py_in_labeled = True
+            elif st == "OUT" and not py_out_labeled:
+                lbl = "Cambio OUT (Python+Hyst PY)"
+                py_out_labeled = True
+            ax.axvline(x=x_evt, color=color, linestyle="-.", linewidth=1.0, alpha=0.7, label=lbl)
 
-    for x_evt, st in firmware_events:
-        color = "#2f2f2f" if st == "IN" else "#666666"
-        lbl = None
-        if not fw_evt_labeled:
-            lbl = "EVT firmware"
-            fw_evt_labeled = True
-        ax.axvline(x=x_evt, color=color, linestyle="--", linewidth=0.8, alpha=0.45, label=lbl)
-    ax.set_title("RSSI crudo vs CMP ESP vs Filtro Python")
+    if show_firmware_events:
+        for x_evt, st in firmware_events:
+            color = "#2f2f2f" if st == "IN" else "#666666"
+            lbl = None
+            if not fw_evt_labeled:
+                lbl = "EVT firmware"
+                fw_evt_labeled = True
+            ax.axvline(x=x_evt, color=color, linestyle="--", linewidth=0.8, alpha=0.45, label=lbl)
+    if plot_mode == "fw-only":
+        ax.set_title("")
+    else:
+        ax.set_title("RSSI crudo vs CMP ESP vs Filtro Python")
     ax.set_xlabel(x_label)
     ax.set_ylabel("RSSI (dBm)")
     ax.grid(True, alpha=0.35)
@@ -791,6 +799,7 @@ def plot_distance(
     hysteresis_out_dist: Optional[float],
     inferred_changes: Sequence[Tuple[float, str]],
     firmware_events: Sequence[Tuple[float, str]],
+    show_firmware_events: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10, 4.5))
     
@@ -838,9 +847,10 @@ def plot_distance(
         ax.axvline(x=x_evt, color=color, linestyle="-", linewidth=0.9, alpha=0.6)
 
     # Optional firmware EVT transitions for visual comparison.
-    for x_evt, st in firmware_events:
-        color = "#2f2f2f" if st == "IN" else "#666666"
-        ax.axvline(x=x_evt, color=color, linestyle="--", linewidth=0.8, alpha=0.45)
+    if show_firmware_events:
+        for x_evt, st in firmware_events:
+            color = "#2f2f2f" if st == "IN" else "#666666"
+            ax.axvline(x=x_evt, color=color, linestyle="--", linewidth=0.8, alpha=0.45)
     
     ax.set_title(f"Estimación de distancia (fuente: {distance_source})")
     ax.set_xlabel(x_label)
@@ -866,6 +876,7 @@ def plot_gamma(
     hysteresis_out_gamma: Optional[float],
     inferred_changes: Sequence[Tuple[float, str]],
     firmware_events: Sequence[Tuple[float, str]],
+    show_firmware_events: bool = False,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10, 4.5))
 
@@ -911,9 +922,10 @@ def plot_gamma(
         color = "#ff7f0e" if st == "IN" else "#9467bd"
         ax.axvline(x=x_evt, color=color, linestyle="-", linewidth=0.9, alpha=0.6)
 
-    for x_evt, st in firmware_events:
-        color = "#2f2f2f" if st == "IN" else "#666666"
-        ax.axvline(x=x_evt, color=color, linestyle="--", linewidth=0.8, alpha=0.45)
+    if show_firmware_events:
+        for x_evt, st in firmware_events:
+            color = "#2f2f2f" if st == "IN" else "#666666"
+            ax.axvline(x=x_evt, color=color, linestyle="--", linewidth=0.8, alpha=0.45)
 
     ax.set_title(f"Comparación relativa gamma (fuente: {gamma_source})")
     ax.set_xlabel(x_label)
@@ -1004,6 +1016,8 @@ def process_one_csv(
     gamma_ukf_kappa: float,
     gamma_ukf_init: float,
     gamma_ukf_init_p: float,
+    plot_mode: str,
+    show_firmware_events: bool,
 ) -> int:
     x_axis, raw_values, esp_cmp_values, py_values_in, x_label = read_rssi_csv(input_csv)
     fw_hysteresis_in, fw_hysteresis_out = read_hysteresis_from_cfg(input_csv)
@@ -1106,7 +1120,7 @@ def process_one_csv(
                 f"[WARN] {input_csv.name}: python-cal hysteresis requested but calibration statistics "
                 "could not be derived. Falling back to firmware CFG hysteresis."
             )
-    firmware_events = read_evt_from_evt_csv(input_csv)
+    firmware_events = read_evt_from_evt_csv(input_csv) if show_firmware_events else []
     py_kalman_fallback = run_kalman(
         raw_values=raw_values,
         q=effective_q,
@@ -1242,6 +1256,7 @@ def process_one_csv(
                 hysteresis_out_dist,
                 inferred_changes,
                 firmware_events_for_plot,
+                show_firmware_events=show_firmware_events,
             )
 
     if gamma_comparison == "on":
@@ -1324,6 +1339,7 @@ def process_one_csv(
                 hysteresis_out_gamma=hysteresis_out_gamma,
                 inferred_changes=inferred_gamma_changes,
                 firmware_events=firmware_events_for_plot,
+                show_firmware_events=show_firmware_events,
             )
 
     plot_raw(out_raw, x_axis, raw_values, x_label, hysteresis_in, hysteresis_out)
@@ -1341,6 +1357,8 @@ def process_one_csv(
         inferred_changes=inferred_rssi_changes,
         inferred_py_changes=inferred_python_rssi_changes,
         firmware_events=firmware_events_for_plot,
+        plot_mode=plot_mode,
+        show_firmware_events=show_firmware_events,
     )
     write_processed_csv(
         out_processed,
@@ -1515,6 +1533,18 @@ def main() -> int:
     parser.add_argument("--gamma-ukf-kappa", type=float, default=0.0, help="Gamma UKF kappa")
     parser.add_argument("--gamma-ukf-init", type=float, default=0.0, help="Gamma UKF initial state")
     parser.add_argument("--gamma-ukf-init-p", type=float, default=1.0, help="Gamma UKF initial covariance")
+    parser.add_argument(
+        "--plot-mode",
+        choices=["full", "fw-only"],
+        default="full",
+        help="Plot content mode: full includes Python overlays, fw-only hides all Python lines/thresholds/change markers",
+    )
+    parser.add_argument(
+        "--firmware-events",
+        choices=["off", "on"],
+        default="off",
+        help="Show/hide vertical EVT firmware markers in plots",
+    )
     parser.add_argument("--plot-raw", default="", help="Output PNG for raw RSSI plot")
     parser.add_argument("--plot-kalman", default="", help="Output PNG for raw vs Kalman plot")
     parser.add_argument("--processed-csv", default="", help="Optional output CSV with raw+kalman")
@@ -1599,6 +1629,8 @@ def main() -> int:
                     gamma_ukf_kappa=args.gamma_ukf_kappa,
                     gamma_ukf_init=args.gamma_ukf_init,
                     gamma_ukf_init_p=args.gamma_ukf_init_p,
+                    plot_mode=args.plot_mode,
+                    show_firmware_events=(args.firmware_events == "on"),
                 )
                 total_samples += n
                 ok_files += 1

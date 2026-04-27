@@ -40,7 +40,8 @@ PowerUpState::PowerUpState() : stateStartTime(0) {}
 void PowerUpState::enter(StateManager* manager) {
     LOG_PRINTLN("[FSM] Entering PowerUpState...");
     stateStartTime = millis();
-    
+    manager->getHardwareManager()->sendCommand(CMD_MSG_SET, USER_MSG_POWERING_UP);
+
     // Activate launcher - primary responsibility of this state
     LOG_PRINTLN("[PowerUp] Activating launcher (CMD_LAUNCHER_ON)...");
     manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_ON, 0);

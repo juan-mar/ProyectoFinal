@@ -29,7 +29,8 @@ void AutoPlayState::enter(StateManager* manager) {
     // Encender BLE
     manager->getHardwareManager()->sendCommand(CMD_TAG_POWER_ON, CMD_TAG_PARAM_DETECTION);
     manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_ON, 0);
-    
+    manager->getHardwareManager()->sendCommand(CMD_MSG_SET,USER_MSG_TRAINING);
+
     vTaskDelay(pdMS_TO_TICKS(50)); 
 }
 

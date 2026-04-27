@@ -108,6 +108,12 @@ public:
     float getBatteryVoltage();
 
     /**
+     * @brief Obtiene la categoría actual de batería.
+     * @return HIGH, MEDIUM, LOW, CRITICAL o UNKNOWN.
+     */
+    const char* getBatteryLevelText();
+
+    /**
      * @brief Obtiene las lecturas actuales del sensor ambiental.
      * @return Estructura EnvData con temperatura, humedad, presión y flag de validez.
      */

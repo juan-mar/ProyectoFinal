@@ -18,6 +18,7 @@
 #include "FS.h"       // For File System base class
 #include "LittleFS.h" // For LittleFS implementation
 #include <freertos/semphr.h>
+#include "Config.h"
 
 /****************************************************************
  * Enums and Constants
@@ -58,7 +59,7 @@ enum SessionSaveStatus {
 #define MAX_VALID_PRESSURE_HPA 1100.0f
 
 // Chunk storage settings
-#define MAX_SESSIONS_PER_CHUNK 20
+#define MAX_SESSIONS_PER_CHUNK DATA_MAX_SESSIONS_PER_CHUNK
 
 /****************************************************************
  * Class Declarations

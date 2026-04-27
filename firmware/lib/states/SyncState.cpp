@@ -43,7 +43,6 @@
 struct SyncTaskParams {
     DataManager* dataManager;
     SupabaseClient* supabaseClient;
-    HardwareManager* hardwareManager;
     QueueHandle_t fsmQueue;
 };
 
@@ -75,10 +74,6 @@ void syncTaskFunction(void* parameter) {
     DataManager* dataManager = params->dataManager;
     SupabaseClient* supabaseClient = params->supabaseClient;
     QueueHandle_t fsmQueue = params->fsmQueue;
-    HardwareManager* hw = params->hardwareManager;
-    
-    //Send CMD
-    hw->sendCommand(CMD_MSG_SET, USER_MSG_SYNCING);
 
     String accessToken = "";
     bool syncFailed = false;
@@ -481,6 +476,7 @@ SyncState::SyncState(DataManager* dataManager, SupabaseClient* supabaseClient)
 void SyncState::enter(StateManager* manager) {
     LOG_PRINTLN("Entering SyncState... Launching background task.");
     //Send CMD
+    manager->getHardwareManager()->sendCommand(CMD_MSG_SET, USER_MSG_SYNCING);
     manager->getHardwareManager()->sendCommand(CMD_LAUNCHER_OFF, 0);
 
     g_cancelSync = false; // Resetea la bandera de cancelación
@@ -488,7 +484,6 @@ void SyncState::enter(StateManager* manager) {
     static SyncTaskParams params; 
     params.dataManager = this->dataManager;
     params.supabaseClient = this->supabaseClient;
-    params.hardwareManager = manager->getHardwareManager();
     params.fsmQueue = manager->getEventQueue();
 
     // Lanza la tarea
@@ -553,15 +548,15 @@ void SyncState::handleEvent(StateManager* manager, Event& event) {
 
         case EVENT_SYNC_COMPLETED:
             LOG_PRINTLN("[SyncState] Event: Sync Completed. Changing to IdleState.");
-            //Send CMD
-            //manager->getUserInterface()->setLedPattern(LED_SUCCESS);
+            manager->getHardwareManager()->sendCommand(CMD_MSG_SET, USER_MSG_SUCCESS);
+            vTaskDelay(pdMS_TO_TICKS(350));
             manager->changeState(new IdleState());
             break;
 
         case EVENT_SYNC_FAILED:
             LOG_PRINTLN("[SyncState] Event: Sync FAILED. Changing to IdleState.");
-            //Send CMD
-            //manager->getUserInterface()->setLedPattern(LED_ERROR_DB);
+            manager->getHardwareManager()->sendCommand(CMD_MSG_SET, USER_MSG_ERROR);
+            vTaskDelay(pdMS_TO_TICKS(500));
             manager->changeState(new IdleState());
             break;
         

@@ -16,6 +16,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 
 /****************************************************************
  * Enums
@@ -74,6 +75,7 @@ public:
 private:
     String supabaseUrl;
     String supabaseApiKey;
+    WiFiClientSecure secureClient;
     HTTPClient http;
 };
 

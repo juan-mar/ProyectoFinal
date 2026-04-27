@@ -90,10 +90,12 @@ Receptor* globalReceptorRef = nullptr;
 class FiltradoRapidoCallback: public BLEAdvertisedDeviceCallbacks {
     Receptor* _ref;
     String _macBuscada;
+  bool _mensajeMostrado;
 public:
     FiltradoRapidoCallback(Receptor* ref, String mac) {
         _ref = ref;
         _macBuscada = mac;
+    _mensajeMostrado = false;
     }
     
     // 1. AGREGA EL ASTERISCO (*) AQUÍ:
@@ -105,14 +107,20 @@ public:
         mac.toUpperCase();
         
         if (mac == _macBuscada) {
-            Serial.println("Dispositivo detectado");  
+          if (!_mensajeMostrado) {
+            Serial.println("Dispositivo detectado: " + mac);
+            _mensajeMostrado = true;
+          }
             _ref->setNewMsg(true);   
             
             calibrating = true;
             
             // 3. CAMBIA EL PUNTO (.) POR LA FLECHA (->) AQUÍ TAMBIÉN:
             _ref->_procesarDato(advertisedDevice->getRSSI());
-        }
+            Serial.println("RSSI: " + String(advertisedDevice->getRSSI()));  
+          
+          
+          }
     }
 };
 
