@@ -21,10 +21,6 @@
 #define KEY_TAG_THRESHOLD "tag_th"
 #define KEY_TAG_VARIANCE "tag_var"
 #define KEY_TAG_BARRIER "tag_bar"
-#define KEY_TAG_CALIB_VALID "tag_cal_ok"
-#define KEY_TAG_THRESHOLD "tag_th"
-#define KEY_TAG_VARIANCE "tag_var"
-#define KEY_TAG_BARRIER "tag_bar"
 
 // Safety margin to avoid LittleFS allocator crash near full capacity.
 #define LITTLEFS_SAFE_FREE_HEADROOM_BYTES 8192
