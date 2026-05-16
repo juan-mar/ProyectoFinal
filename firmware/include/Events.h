@@ -63,15 +63,8 @@ struct Event {
         int     intValue;
         float   floatValue;
         bool    boolValue;
-        struct {
-            float threshold;
-            float variance;
-            float barrier;
-            float kalmanQ;
-            float kalmanR;
-            float kalmanX0;
-            float kalmanP0;
-        } calibration; // Removed calibration struct
+        /* Calibration payload removed — calibration parameters are persisted
+           and handled via DataManager / HardwareManager interfaces instead. */
     } payload;
 };
 
