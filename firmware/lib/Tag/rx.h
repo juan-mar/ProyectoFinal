@@ -79,6 +79,10 @@ class Receptor {
         float getKalmanX0() const;
         float getKalmanP0() const;
 
+        void setCalibration(float threshold,
+                float variance,
+                float barrier);
+
         void setNewMsg(bool val);
         bool isNewMsg();
 

@@ -63,6 +63,15 @@ struct Event {
         int     intValue;
         float   floatValue;
         bool    boolValue;
+        struct {
+            float threshold;
+            float variance;
+            float barrier;
+            float kalmanQ;
+            float kalmanR;
+            float kalmanX0;
+            float kalmanP0;
+        } calibration; // Removed calibration struct
     } payload;
 };
 

@@ -258,6 +258,28 @@ float Receptor::getKalmanP0() const {
   return filtro_kalman.getP0();
 }
 
+void Receptor::setCalibration(float threshold,
+                              float variance,
+                              float barrier) {
+    this->threshold = threshold;
+    this->varianza = variance;
+    this->barrier = barrier;
+
+    // Apply variance as measurement noise R in the Kalman filter and reset filter state
+    filtro_kalman.set_varianzaR(this->varianza);
+    filtro_kalman.reset(-100.0f, 100.0f);
+
+    // Initialize RSSI state to a distant value
+    rssiActual = -100;
+    rssi_filtered = -100.0f;
+    new_msg = false;
+    in_thres = false;
+    _prevStateDetected = NOT_DETECTED;
+
+    LOG_PRINTF("[TAG] Calibration applied (th=%.2f var=%.2f bar=%.2f)\n",
+               this->threshold, this->varianza, this->barrier);
+}
+
 
 void Receptor::setNewMsg(bool val) {
     new_msg = val;

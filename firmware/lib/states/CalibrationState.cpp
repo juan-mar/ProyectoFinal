@@ -8,7 +8,6 @@
  ****************************************************************/
 #include "CalibrationState.h"
 #include "StateManager.h"
-#include "DataManager.h"
 #include "Events.h"
 #include "Config.h"
 #include "HardwareManager.h"
@@ -33,12 +32,12 @@
  */
 #define CALIBRATION_TIMEOUT_MS (60 * 1000)  // 60 seconds
 
-/****************************************************************
+ /****************************************************************
  * Class Method Implementations
  ****************************************************************/
 
-CalibrationState::CalibrationState(DataManager* dataManager, HardwareManager* hardwareManager) 
-    : dataManager(dataManager), hardwareManager(hardwareManager), timeoutTriggered(false),
+CalibrationState::CalibrationState(HardwareManager* hardwareManager) 
+    : hardwareManager(hardwareManager), timeoutTriggered(false),
     changingState(false)
 {}
 
@@ -47,6 +46,7 @@ void CalibrationState::enter(StateManager* manager) {
     EVENT_INFO("Cal:Entered");
 
     hardwareManager->sendCommand(CMD_TAG_POWER_ON, CMD_TAG_PARAM_CALIBRATION);
+    manager->getHardwareManager()->sendCommand(CMD_MSG_SET,USER_MSG_CALIBRATING);
 
     // Record the time when calibration started
     calibrationStartTime = millis();
@@ -80,21 +80,21 @@ void CalibrationState::handleEvent(StateManager* manager, Event& event) {
         case EVENT_CALIBRATION_COMPLETE:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Complete. Returning to ConfigState.");
             EVENT_INFO("Cal:Complete");
-            manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            manager->changeState(new ConfigState(manager->getDataManager(), manager->getWebServerManager()));
             changingState = true;
             break;
 
         case EVENT_CALIBRATION_CANCEL:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Cancelled. Returning to ConfigState.");
             EVENT_WARN("Cal:Cancelled");
-            manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            manager->changeState(new ConfigState(manager->getDataManager(), manager->getWebServerManager()));
             changingState = true;
             break;
 
         case EVENT_CALIBRATION_FAILED:
             LOG_PRINTLN("[CalibrationState] Event: Calibration Failed. Returning to ConfigState.");
             EVENT_ERROR("Cal:FAILED");
-            manager->changeState(new ConfigState(dataManager, manager->getWebServerManager()));
+            manager->changeState(new ConfigState(manager->getDataManager(), manager->getWebServerManager()));
             changingState = true;
             break;
         

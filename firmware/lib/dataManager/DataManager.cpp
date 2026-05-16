@@ -17,6 +17,14 @@
 #define KEY_DEVICE_ID "dev_id"
 #define KEY_WIFI_SSID "wifi_ssid"
 #define KEY_WIFI_PASS "wifi_pass"
+#define KEY_TAG_CALIB_VALID "tag_cal_ok"
+#define KEY_TAG_THRESHOLD "tag_th"
+#define KEY_TAG_VARIANCE "tag_var"
+#define KEY_TAG_BARRIER "tag_bar"
+#define KEY_TAG_CALIB_VALID "tag_cal_ok"
+#define KEY_TAG_THRESHOLD "tag_th"
+#define KEY_TAG_VARIANCE "tag_var"
+#define KEY_TAG_BARRIER "tag_bar"
 
 // Safety margin to avoid LittleFS allocator crash near full capacity.
 #define LITTLEFS_SAFE_FREE_HEADROOM_BYTES 8192
@@ -160,15 +168,22 @@ void DataManager::getStorageUsage(size_t &totalBytes, size_t &usedBytes) {
 //---- NVS (Preferences) Methods --------------------------------
 
 void DataManager::saveDeviceID(String id) {
-    prefs.begin(PREFS_NAMESPACE, false); // false = read/write
-    prefs.putString(KEY_DEVICE_ID, id);
-    prefs.end();
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        prefs.begin(PREFS_NAMESPACE, false); // false = read/write
+        prefs.putString(KEY_DEVICE_ID, id);
+        prefs.end();
+        xSemaphoreGive(storageMutex);
+    }
 }
 
 String DataManager::getDeviceID() {
-    prefs.begin(PREFS_NAMESPACE, true); // true = read-only
-    String id = prefs.getString(KEY_DEVICE_ID, "DEFAULT-000");
-    prefs.end();
+    String id = "DEFAULT-000";
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        prefs.begin(PREFS_NAMESPACE, true); // true = read-only
+        id = prefs.getString(KEY_DEVICE_ID, "DEFAULT-000");
+        prefs.end();
+        xSemaphoreGive(storageMutex);
+    }
     id.trim();
     if (id.length() == 0) {
         return "DEFAULT-000";
@@ -177,25 +192,82 @@ String DataManager::getDeviceID() {
 }
 
 void DataManager::saveWifiCredentials(String ssid, String password) {
-    prefs.begin(PREFS_NAMESPACE, false);
-    prefs.putString(KEY_WIFI_SSID, ssid);
-    prefs.putString(KEY_WIFI_PASS, password);
-    prefs.end();
-    LOG_PRINTLN("WiFi credentials saved to NVS.");
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        prefs.begin(PREFS_NAMESPACE, false);
+        prefs.putString(KEY_WIFI_SSID, ssid);
+        prefs.putString(KEY_WIFI_PASS, password);
+        prefs.end();
+        xSemaphoreGive(storageMutex);
+        LOG_PRINTLN("WiFi credentials saved to NVS.");
+    }
 }
 
 String DataManager::getWifiSSID() {
-    prefs.begin(PREFS_NAMESPACE, true);
-    String ssid = prefs.getString(KEY_WIFI_SSID, "");
-    prefs.end();
+    String ssid = "";
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        prefs.begin(PREFS_NAMESPACE, true);
+        ssid = prefs.getString(KEY_WIFI_SSID, "");
+        prefs.end();
+        xSemaphoreGive(storageMutex);
+    }
     return ssid;
 }
 
 String DataManager::getWifiPassword() {
-    prefs.begin(PREFS_NAMESPACE, true);
-    String pass = prefs.getString(KEY_WIFI_PASS, "");
-    prefs.end();
+    String pass = "";
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) == pdTRUE) {
+        prefs.begin(PREFS_NAMESPACE, true);
+        pass = prefs.getString(KEY_WIFI_PASS, "");
+        prefs.end();
+        xSemaphoreGive(storageMutex);
+    }
     return pass;
+}
+
+bool DataManager::saveTagCalibration(float threshold,
+                                     float variance,
+                                     float barrier) {
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) != pdTRUE) {
+        return false;
+    }
+
+    prefs.begin(PREFS_NAMESPACE, false);
+    prefs.putFloat(KEY_TAG_THRESHOLD, threshold);
+    prefs.putFloat(KEY_TAG_VARIANCE, variance);
+    prefs.putFloat(KEY_TAG_BARRIER, barrier);
+    prefs.putBool(KEY_TAG_CALIB_VALID, true);
+    prefs.end();
+    xSemaphoreGive(storageMutex);
+
+    LOG_PRINTF("DataManager: TAG calibration saved (th=%.2f var=%.2f bar=%.2f)\n",
+               threshold, variance, barrier);
+    return true;
+}
+
+bool DataManager::loadTagCalibration(float &threshold,
+                                     float &variance,
+                                     float &barrier) {
+    if (xSemaphoreTake(storageMutex, portMAX_DELAY) != pdTRUE) {
+        return false;
+    }
+
+    prefs.begin(PREFS_NAMESPACE, true);
+    bool isValid = prefs.getBool(KEY_TAG_CALIB_VALID, false);
+    if (!isValid) {
+        prefs.end();
+        xSemaphoreGive(storageMutex);
+        return false;
+    }
+
+    threshold = prefs.getFloat(KEY_TAG_THRESHOLD, 0.0f);
+    variance = prefs.getFloat(KEY_TAG_VARIANCE, 0.0f);
+    barrier = prefs.getFloat(KEY_TAG_BARRIER, 0.0f);
+    prefs.end();
+    xSemaphoreGive(storageMutex);
+
+    LOG_PRINTF("DataManager: TAG calibration loaded (th=%.2f var=%.2f bar=%.2f)\n",
+               threshold, variance, barrier);
+    return true;
 }
 
 //---- LittleFS Methods -----------------------------------------

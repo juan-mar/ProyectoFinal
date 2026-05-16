@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include <freertos/queue.h>
 #include "Events.h"                 // Para poder enviar eventos a la FSM
+#include "DataManager.h"            // NVS access for persisted TAG calibration
 #include "RemoteControl.h"          // Tu driver de NRF24
 #include "HardwareConfig.h"         // Configuración centralizada de pines
 #include "rx.h"                     // Tu nuevo driver de BLE
@@ -65,7 +66,7 @@ public:
     HardwareManager();
 
     // Inicialización: Recibe la cola de la FSM para poder hablarle
-    void init(QueueHandle_t fsmQueue);
+    void init(QueueHandle_t fsmQueue, DataManager* dataManager);
 
     // Método Thread-Safe para que la FSM le mande órdenes
     bool sendCommand(HwCmdType cmd, int param = 0);
@@ -130,6 +131,7 @@ private:
     // Colas
     QueueHandle_t _fsmQueue;       // Salida -> FSM
     QueueHandle_t _commandQueue;   // Entrada <- FSM
+    DataManager* _dataManager;
 
     // Drivers Internos
     RemoteControl _remoteControl;
@@ -193,6 +195,8 @@ private:
     void checkDrivers();
     void update_tag();
     void update_remote();
+    void loadPersistedTagCalibration();
+    bool persistCurrentTagCalibration();
     
     // --- GPIO Status (mode switch, power switch, USB)
     void checkGPIOStatus();

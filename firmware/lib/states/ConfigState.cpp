@@ -107,7 +107,7 @@ void ConfigState::handleEvent(StateManager* manager, Event& event) {
             EVENT_INFO("Cfg:->Calib");
             this->sessionConfig = nullptr;
             changingState = true;
-            manager->changeState(new CalibrationState(dataManager, manager->getHardwareManager()));
+            manager->changeState(new CalibrationState(manager->getHardwareManager()));
             break;
 
         case EVENT_START_MANUAL_PLAY:

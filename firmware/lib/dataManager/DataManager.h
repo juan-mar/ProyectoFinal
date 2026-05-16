@@ -137,6 +137,24 @@ public:
      */
     String getWifiPassword();
 
+    /**
+     * @brief Saves the TAG calibration parameters to NVS.
+     * Only stores: threshold, variance (for Kalman R), and barrier.
+     * @return true if the values were stored successfully.
+     */
+    bool saveTagCalibration(float threshold,
+                            float variance,
+                            float barrier);
+
+    /**
+     * @brief Loads the TAG calibration parameters from NVS.
+     * Only retrieves: threshold, variance (for Kalman R), and barrier.
+     * @return true if a valid calibration was found.
+     */
+    bool loadTagCalibration(float &threshold,
+                            float &variance,
+                            float &barrier);
+
     
 //---- LittleFS Methods -----------------------------------------
     /**

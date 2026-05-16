@@ -198,8 +198,8 @@ void setup() {
     
     // 7. Initialize HardwareManager with FSM event queue BEFORE StateManager begins
     // This ensures command queue is ready when PowerUpState::enter() sends CMD_LAUNCHER_ON
-    g_hardwareManager->init(g_stateManager->getEventQueue());
-    
+    g_hardwareManager->init(g_stateManager->getEventQueue(), g_dataManager);
+
     g_stateManager->begin();
 
     // 8. Create the StateManager's dedicated task

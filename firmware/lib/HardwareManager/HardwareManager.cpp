@@ -1,5 +1,6 @@
 #include "HardwareManager.h"
 #include "Config.h"
+#include "DataManager.h"
 #include "EventLogger.h"
 #include "RssiLogger.h"       // RSSI signal strength logger (third output)
 #include <driver/uart.h>
@@ -7,7 +8,7 @@
 
 HardwareManager::HardwareManager() 
     : _lastBatteryReading(0), _lastEnvironmentReading(0), _bleScanner(MAC_ADDR),
-      _powerStatusState({false, false, false}) {
+    _powerStatusState({false, false, false}), _dataManager(nullptr) {
     // Inicializar queue de comandos (independiente del resto del sistema)
     _commandQueue = xQueueCreate(HW_COMMAND_QUEUE_SIZE, sizeof(HwMessage));
     if (_commandQueue == NULL) {
@@ -34,8 +35,9 @@ HardwareManager::HardwareManager()
     _actuatorState.launcherEN2Pending = false;
 }
 
-void HardwareManager::init(QueueHandle_t fsmQueue) {
+void HardwareManager::init(QueueHandle_t fsmQueue, DataManager* dataManager) {
     _fsmQueue = fsmQueue;
+    _dataManager = dataManager;
     _messageInterface.begin();
 
     LOG_PRINTLN("HardwareManager: Initializing pins...");
@@ -104,6 +106,7 @@ void HardwareManager::init(QueueHandle_t fsmQueue) {
     #endif
 
     LOG_PRINTLN("HardwareManager: Initialization complete");
+    loadPersistedTagCalibration();
 }
 
 bool HardwareManager::sendCommand(HwCmdType cmd, int param) {
@@ -268,8 +271,12 @@ void HardwareManager::update_tag() {
                 "OUT"
             );
             #endif
-            //SEND EVENT TO FSM IF NEEDED
-            Event ev;
+            // Send the calibration snapshot to the FSM through the queue.
+            if (!persistCurrentTagCalibration()) {
+                LOG_PRINTLN("[HW] WARNING: Failed to persist TAG calibration to NVS.");
+            }
+
+            Event ev = {};
             ev.type = EVENT_CALIBRATION_COMPLETE;
             xQueueSend(_fsmQueue, &ev, 0);
             break;
@@ -787,6 +794,34 @@ const char* HardwareManager::getBatteryLevelText() {
 
 EnvData HardwareManager::getEnvironmentData() {
     return _environmentSensor.getLastValidReadings();
+}
+
+void HardwareManager::loadPersistedTagCalibration() {
+    if (_dataManager == nullptr) {
+        return;
+    }
+
+    float threshold = 0.0f;
+    float variance = 0.0f;
+    float barrier = 0.0f;
+
+    if (_dataManager->loadTagCalibration(threshold, variance, barrier)) {
+        _bleScanner.setCalibration(threshold, variance, barrier);
+        LOG_PRINTLN("[HW] Loaded persisted TAG calibration from NVS.");
+    } else {
+        LOG_PRINTLN("[HW] No persisted TAG calibration found. Using runtime defaults.");
+    }
+}
+
+bool HardwareManager::persistCurrentTagCalibration() {
+    if (_dataManager == nullptr) {
+        return false;
+    }
+
+    return _dataManager->saveTagCalibration(
+        _bleScanner.getThreshold(),
+        _bleScanner.getVarianza(),
+        _bleScanner.getBarrier());
 }
 
 void HardwareManager::notifyPowerOffState(bool entering) {

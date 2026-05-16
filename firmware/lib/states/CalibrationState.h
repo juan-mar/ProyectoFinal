@@ -17,7 +17,6 @@
 /****************************************************************
  * Forward Declarations
  ****************************************************************/
-class DataManager;
 class HardwareManager;
 
 /****************************************************************
@@ -30,7 +29,7 @@ class HardwareManager;
  */
 class CalibrationState : public State {
 public:
-    CalibrationState(DataManager* dataManager, HardwareManager* hardwareManager);
+    CalibrationState(HardwareManager* hardwareManager);
 
     virtual void enter(StateManager* manager) override;
     virtual void execute(StateManager* manager) override;
@@ -41,7 +40,6 @@ protected:
     virtual void update(StateManager* manager) override;
 
 private:
-    DataManager* dataManager;       
     HardwareManager* hardwareManager;
     unsigned long calibrationStartTime;  // Time when calibration started (ms)
     bool timeoutTriggered;
